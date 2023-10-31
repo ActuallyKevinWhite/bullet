@@ -1,8 +1,8 @@
 // index.ts
 var CONFIG = {
   DISPLAY_NAME: "display",
-  DISPLAY_WIDTH: 512,
-  DISPLAY_HEIGHT: 320,
+  DISPLAY_WIDTH: 1280,
+  DISPLAY_HEIGHT: 720,
   DEBUG_INPUT: false,
   DEBUG_PERFORMANCE: true,
   DEBUG_RENDERER: false,
@@ -10,6 +10,8 @@ var CONFIG = {
   PERFORMANCE_ENTITY_LIMTER: false,
   PROJECTILE_LIMIT_GOOD: 5000,
   PROJECTILE_LIMIT_EVIL: 15000,
+  CAMERA_FOV: 0.5,
+  CAMERA_EASE: 0.95,
   MONSTER_LIMIT: 1000,
   FPS: 60
 };
@@ -140,8 +142,14 @@ var Display = {
     if (!player) {
       return false;
     }
-    Display.Camera.x = player.Position.x - CONFIG.DISPLAY_WIDTH / 2;
-    Display.Camera.y = player.Position.y - CONFIG.DISPLAY_HEIGHT / 2;
+    const mouse_in_world = Vector.add(Input.Mouse, Display.Camera);
+    const target = Vector.add(player.Position, Vector.scale(Vector.subtract(mouse_in_world, player.Position), CONFIG.CAMERA_FOV));
+    let distance = Vector.subtract(target, Display.Camera);
+    distance = Vector.subtract(distance, { x: CONFIG.DISPLAY_WIDTH / 2, y: CONFIG.DISPLAY_HEIGHT / 2 });
+    distance = Vector.scale(distance, CONFIG.CAMERA_EASE);
+    distance = Vector.subtract(target, distance);
+    Display.Camera.x = distance.x - CONFIG.DISPLAY_WIDTH / 2;
+    Display.Camera.y = distance.y - CONFIG.DISPLAY_HEIGHT / 2;
     return true;
   }
 };
