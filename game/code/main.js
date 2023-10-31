@@ -197,20 +197,46 @@ var Monster = {
     return Monster.list.find((monster) => monster.uuid === uuid);
   },
   update: function() {
+    const player = Player.get(Game.Player);
+    if (!player) {
+      return false;
+    }
     if (Game.time_frames % (CONFIG.FPS * 0.5) === 0) {
-      const x = Math.random() * CONFIG.DISPLAY_WIDTH;
-      const y = Math.random() * CONFIG.DISPLAY_HEIGHT;
-      Monster.create({ x, y });
+      const side = Math.floor(Math.random() * 4);
+      let position = { x: 0, y: 0 };
+      switch (side) {
+        case 0:
+          position = {
+            x: player.Position.x - CONFIG.DISPLAY_WIDTH / 2 + Math.random() * CONFIG.DISPLAY_WIDTH,
+            y: player.Position.y - CONFIG.DISPLAY_HEIGHT / 2 - Math.random() * 128
+          };
+          break;
+        case 1:
+          position = {
+            x: player.Position.x + CONFIG.DISPLAY_WIDTH / 2 + Math.random() * 128,
+            y: player.Position.y - CONFIG.DISPLAY_HEIGHT / 2 + Math.random() * CONFIG.DISPLAY_HEIGHT
+          };
+          break;
+        case 2:
+          position = {
+            x: player.Position.x - CONFIG.DISPLAY_WIDTH / 2 + Math.random() * CONFIG.DISPLAY_WIDTH,
+            y: player.Position.y + CONFIG.DISPLAY_HEIGHT / 2 + Math.random() * 128
+          };
+          break;
+        case 3:
+          position = {
+            x: player.Position.x - CONFIG.DISPLAY_WIDTH / 2 - Math.random() * 128,
+            y: player.Position.y - CONFIG.DISPLAY_HEIGHT / 2 + Math.random() * CONFIG.DISPLAY_HEIGHT
+          };
+          break;
+      }
+      Monster.create(position);
     }
     for (let m = 0;m < Monster.list.length; m++) {
       const monster = Monster.list[m];
       if (monster.Health.x <= 0) {
         Monster.list.splice(m, 1);
         m--;
-        continue;
-      }
-      const player = Player.get(Game.Player);
-      if (!player) {
         continue;
       }
       const direction = Vector.normalize(Vector.subtract(player.Position, monster.Position));

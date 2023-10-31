@@ -233,10 +233,40 @@ const Monster = {
         return Monster.list.find(monster => monster.uuid === uuid);
     },
     update: function () {
+        const player = Player.get(Game.Player);
+        if (!player) { return false; }
+
         if (Game.time_frames % (CONFIG.FPS * 0.5) === 0) {
-            const x = Math.random() * CONFIG.DISPLAY_WIDTH;
-            const y = Math.random() * CONFIG.DISPLAY_HEIGHT;
-            Monster.create({ x: x, y: y });
+            // Spawn monsters off screen
+            const side = Math.floor(Math.random() * 4);
+            let position = {x: 0, y: 0}
+            switch (side) {
+                case 0: // Top
+                    position = { 
+                        x: player.Position.x - CONFIG.DISPLAY_WIDTH / 2 + Math.random() * CONFIG.DISPLAY_WIDTH,
+                        y: player.Position.y - CONFIG.DISPLAY_HEIGHT / 2 - Math.random() * 128
+                    };
+                    break;
+                case 1: // Right
+                    position = { 
+                        x: player.Position.x + CONFIG.DISPLAY_WIDTH / 2 + Math.random() * 128,
+                        y: player.Position.y - CONFIG.DISPLAY_HEIGHT / 2 + Math.random() * CONFIG.DISPLAY_HEIGHT
+                    };
+                    break;
+                case 2: // Bottom
+                    position = { 
+                        x: player.Position.x - CONFIG.DISPLAY_WIDTH / 2 + Math.random() * CONFIG.DISPLAY_WIDTH,
+                        y: player.Position.y + CONFIG.DISPLAY_HEIGHT / 2 + Math.random() * 128
+                    };
+                    break;
+                case 3: // Left
+                    position = { 
+                        x: player.Position.x - CONFIG.DISPLAY_WIDTH / 2 - Math.random() * 128,
+                        y: player.Position.y - CONFIG.DISPLAY_HEIGHT / 2 + Math.random() * CONFIG.DISPLAY_HEIGHT
+                    };
+                    break;
+            }
+            Monster.create(position);
         }
         for (let m = 0; m < Monster.list.length; m++) {
             const monster = Monster.list[m];
@@ -247,8 +277,6 @@ const Monster = {
                 continue;
             }
             // Head towards player
-            const player = Player.get(Game.Player);
-            if (!player) { continue; }
             const direction = Vector.normalize(Vector.subtract(player.Position, monster.Position));
             monster.Position.x += direction.x;
             monster.Position.y += direction.y;
