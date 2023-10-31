@@ -1,8 +1,22 @@
 // index.ts
+var Palette = {
+  white: "#ecece0",
+  light: "#ecc197",
+  accent: "#d47563",
+  dark: "#5c6181",
+  black: "#3b3149"
+};
 var CONFIG = {
   DISPLAY_NAME: "display",
   DISPLAY_WIDTH: 1280,
   DISPLAY_HEIGHT: 720,
+  COLOR_VOID: Palette.black,
+  COLOR_ARENA: Palette.dark,
+  COLOR_PLAYER: Palette.white,
+  COLOR_MONSTER: Palette.light,
+  COLOR_ORB: Palette.light,
+  COLOR_PROJECTILE_GOOD: Palette.white,
+  COLOR_PROJECTILE_BAD: Palette.white,
   DEBUG_INPUT: false,
   DEBUG_PERFORMANCE: true,
   DEBUG_RENDERER: false,
@@ -46,7 +60,7 @@ var Debug = {
       return false;
     }
     const mouse_in_world = Vector.add(Input.Mouse, Display.Camera);
-    Display.draw_rectangle(player.Position, { x: 32, y: 32 }, "red");
+    Display.draw_rectangle(player.Position, { x: 32, y: 32 }, "RED");
     Display.draw_circle(mouse_in_world, 4, "blue");
     Display.draw_line(player.Position, mouse_in_world, "white");
   }
@@ -98,7 +112,7 @@ var Display = {
       Game.Canvas.style.cursor = "default";
     });
   },
-  clear: function(color = "black") {
+  clear: function(color = CONFIG.COLOR_VOID) {
     if (!Game.Context) {
       return false;
     }
@@ -267,7 +281,7 @@ var Player = {
     if (Input.Mouse_Down) {
       Gun.fire(Game.Gun, Vector.add({ x: 0, y: 0 }, player.Position), Vector.normalize(Vector.subtract(mouse_to_camera, player.Position)));
     }
-    Display.draw_rectangle(player.Position, player.Dimensions, "red");
+    Display.draw_rectangle(player.Position, player.Dimensions, CONFIG.COLOR_PLAYER);
   }
 };
 var Monster = {
@@ -341,7 +355,7 @@ var Monster = {
       monster.Position.x += direction.x;
       monster.Position.y += direction.y;
       Gun.fire(monster.Gun, Vector.clone(monster.Position), direction);
-      Display.draw_rectangle(monster.Position, monster.Dimensions, "blue");
+      Display.draw_rectangle(monster.Position, monster.Dimensions, CONFIG.COLOR_MONSTER);
     }
   }
 };
@@ -389,7 +403,7 @@ var Projectile = {
           }
         }
       }
-      Display.draw_circle(projectile.Position, projectile.Dimensions.x, "green");
+      Display.draw_circle(projectile.Position, projectile.Dimensions.x, CONFIG.COLOR_PROJECTILE_GOOD);
     }
     if (Projectile.evil_list.length > CONFIG.PROJECTILE_LIMIT_EVIL && CONFIG.PERFORMANCE_ENTITY_LIMTER) {
       const excess = Projectile.evil_list.length - CONFIG.PROJECTILE_LIMIT_EVIL;
@@ -416,7 +430,7 @@ var Projectile = {
           }
         }
       }
-      Display.draw_circle(projectile.Position, projectile.Dimensions.x, "blue");
+      Display.draw_circle(projectile.Position, projectile.Dimensions.x, CONFIG.COLOR_PROJECTILE_BAD);
     }
   }
 };
@@ -521,7 +535,7 @@ var Orb = {
           continue;
         }
       }
-      Display.draw_circle(orb.Position, orb.Dimensions.x, "yellow");
+      Display.draw_circle(orb.Position, orb.Dimensions.x, CONFIG.COLOR_ORB);
     }
   }
 };
@@ -530,7 +544,7 @@ var Arena = {
     Dimensions: { x: 1000, y: 1000 }
   },
   update: function() {
-    Display.draw_rectangle({ x: Arena.Settings.Dimensions.x / 2, y: Arena.Settings.Dimensions.y / 2 }, Arena.Settings.Dimensions, "purple");
+    Display.draw_rectangle({ x: Arena.Settings.Dimensions.x / 2, y: Arena.Settings.Dimensions.y / 2 }, Arena.Settings.Dimensions, CONFIG.COLOR_ARENA);
   }
 };
 var Game = {
@@ -547,7 +561,7 @@ var Game = {
     Game.Context = Game.Canvas.getContext("2d");
     Game.Canvas.width = CONFIG.DISPLAY_WIDTH;
     Game.Canvas.height = CONFIG.DISPLAY_HEIGHT;
-    Game.Context.fillStyle = "black";
+    Game.Context.fillStyle = CONFIG.COLOR_VOID;
     Game.Context.fillRect(0, 0, CONFIG.DISPLAY_WIDTH, CONFIG.DISPLAY_HEIGHT);
     Input.initialize();
     Display.intialize();
