@@ -1,15 +1,3 @@
 # bullet
 
-To install dependencies:
-
-```bash
-bun install
-```
-
-To run:
-
-```bash
-bun run index.ts
-```
-
-This project was created using `bun init` in bun v1.0.7. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.
+To play this game, just download it and drag the index.html file into a browser of your choice. If it doesn't work, consider a better browser.
