@@ -2,10 +2,19 @@
 var CONFIG = {
   DISPLAY_NAME: "display",
   DISPLAY_WIDTH: 640,
-  DISPLAY_HEIGHT: 480
+  DISPLAY_HEIGHT: 480,
+  FPS: 60
 };
 console.log("Hello via Bun!");
 var Display = {
+  clear: function(color = "black") {
+    if (!Game.Context) {
+      return false;
+    }
+    Game.Context.fillStyle = color;
+    Game.Context.fillRect(0, 0, CONFIG.DISPLAY_WIDTH, CONFIG.DISPLAY_HEIGHT);
+    return true;
+  },
   draw_rectangle: function(position, dimensions, color) {
     if (!Game.Context) {
       return false;
@@ -36,9 +45,25 @@ var Display = {
     return true;
   }
 };
+var Player = {
+  uuid: 0,
+  list: [],
+  create: function(position) {
+    const player = {
+      Position: position,
+      uuid: Player.uuid++
+    };
+    Player.list.push(player);
+    return player.uuid;
+  },
+  get: function(uuid) {
+    return Player.list.find((player) => player.uuid === uuid);
+  }
+};
 var Game = {
   Canvas: null,
   Context: null,
+  Loop: null,
   initialize: function() {
     Game.Canvas = document.getElementById(CONFIG.DISPLAY_NAME);
     Game.Context = Game.Canvas.getContext("2d");
@@ -46,9 +71,15 @@ var Game = {
     Game.Canvas.height = CONFIG.DISPLAY_HEIGHT;
     Game.Context.fillStyle = "black";
     Game.Context.fillRect(0, 0, CONFIG.DISPLAY_WIDTH, CONFIG.DISPLAY_HEIGHT);
-    Display.draw_rectangle({ x: 100, y: 100 }, { x: 32, y: 32 }, "red");
-    Display.draw_circle({ x: 100, y: 100 }, 8, "blue");
-    Display.draw_line({ x: 100, y: 100 }, { x: 200, y: 200 }, "green");
+    Player.create({ x: CONFIG.DISPLAY_WIDTH / 2, y: CONFIG.DISPLAY_HEIGHT / 2 });
+    Game.Loop = setInterval(Game.update, 1000 / CONFIG.FPS);
+  },
+  update: function() {
+    Display.clear();
+    const player = Player.get(0);
+    if (player) {
+      Display.draw_rectangle(player.Position, { x: 32, y: 32 }, "red");
+    }
   }
 };
 document.addEventListener("DOMContentLoaded", () => {

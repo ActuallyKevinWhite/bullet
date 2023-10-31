@@ -4,6 +4,8 @@ const CONFIG = {
     DISPLAY_NAME: "display",
     DISPLAY_WIDTH: 640,
     DISPLAY_HEIGHT: 480,
+
+    FPS: 60,
 }
 console.log("Hello via Bun!");
 interface Vector {
@@ -11,6 +13,12 @@ interface Vector {
     y: number
 }
 const Display = {
+    clear: function (color: string = "black") {
+        if (!Game.Context) { return false; }
+        Game.Context.fillStyle = color;
+        Game.Context.fillRect(0, 0, CONFIG.DISPLAY_WIDTH, CONFIG.DISPLAY_HEIGHT);
+        return true;
+    },
     // Centered for the sake of the bullet hell
     draw_rectangle: function (position: Vector, dimensions: Vector, color: string) {
         if (!Game.Context) { return false; }
@@ -36,10 +44,31 @@ const Display = {
         return true;
     }
 }
+interface Player {
+    Position: Vector,
+    uuid: number
+}
+const Player = {
+    uuid: 0,
+    list: [] as Player[],
+    create: function (position: Vector) {
+        const player = {
+            Position: position,
+            uuid: Player.uuid++,
+        }
+        Player.list.push(player);
+        return player.uuid;
+    },
+    get: function (uuid: number) {
+        return Player.list.find(player => player.uuid === uuid);
+    }
+}
 
 const Game = {
     Canvas:  null as HTMLCanvasElement        | null,
     Context: null as CanvasRenderingContext2D | null,
+
+    Loop: null as Timer | null,
 
     initialize: function () {
         Game.Canvas  = document.getElementById(CONFIG.DISPLAY_NAME) as HTMLCanvasElement;
@@ -50,11 +79,24 @@ const Game = {
 
         Game.Context.fillStyle = "black";
         Game.Context.fillRect(0, 0, CONFIG.DISPLAY_WIDTH, CONFIG.DISPLAY_HEIGHT);
-        Display.draw_rectangle({ x: 100, y: 100 }, { x: 32, y: 32 }, 'red')
-        Display.draw_circle({ x: 100, y: 100 }, 8, 'blue')
-        Display.draw_line({ x: 100, y: 100 }, { x: 200, y: 200 }, 'green')
+
+        Player.create({ x: CONFIG.DISPLAY_WIDTH / 2, y: CONFIG.DISPLAY_HEIGHT / 2 });
+
+        Game.Loop = setInterval(Game.update, 1000 / CONFIG.FPS);
+    },
+    update: function () {
+        // Clear the screen
+        Display.clear();
+        // Draw player
+        const player = Player.get(0);
+        if (player) {
+            Display.draw_rectangle(player.Position, { x: 32, y: 32 }, 'red')
+        }
+        // Draw the mouse position later
     }
 }
+
+
 
 document.addEventListener("DOMContentLoaded", () => {
     Game.initialize();
