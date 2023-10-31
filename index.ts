@@ -178,9 +178,9 @@ const Player = {
         if (Input.Keys["KeyD"]) { player.Position.x += 5; }
         // Clamp player to Arena
         player.Position.x = Math.max(player.Position.x, 0);
-        player.Position.x = Math.min(player.Position.x, Game.Arena.x);
+        player.Position.x = Math.min(player.Position.x, Arena.Settings.Dimensions.x);
         player.Position.y = Math.max(player.Position.y, 0);
-        player.Position.y = Math.min(player.Position.y, Game.Arena.y);
+        player.Position.y = Math.min(player.Position.y, Arena.Settings.Dimensions.y);
         // Shoot a bullet in the direction of the mouse from the player
         Display.update();
         const mouse_to_camera = Vector.add(Input.Mouse, Display.Camera);
@@ -361,8 +361,11 @@ const Projectile = {
     }    
 }
 const Arena = {
+    Settings: {
+        Dimensions: {x: 200, y: 200}
+    },
     update: function () {
-        Display.draw_rectangle({x: Game.Arena.x / 2, y: Game.Arena.y / 2}, Game.Arena, 'purple')
+        Display.draw_rectangle({x: Arena.Settings.Dimensions.x / 2, y: Arena.Settings.Dimensions.y / 2}, Arena.Settings.Dimensions, 'purple')
     }
 }
 const Game = {
@@ -375,8 +378,6 @@ const Game = {
     time_ms:     0,
 
     Player: -1,
-
-    Arena: {x: 200, y: 200},
 
     initialize: function () {
         Game.Canvas  = document.getElementById(CONFIG.DISPLAY_NAME) as HTMLCanvasElement;
