@@ -90,6 +90,14 @@ var Vector = {
 };
 var Display = {
   Camera: { x: 0, y: 0 },
+  intialize: function() {
+    Game.Canvas.addEventListener("mouseenter", function() {
+      Game.Canvas.style.cursor = "none";
+    });
+    Game.Canvas.addEventListener("mouseleave", function() {
+      Game.Canvas.style.cursor = "default";
+    });
+  },
   clear: function(color = "black") {
     if (!Game.Context) {
       return false;
@@ -114,6 +122,17 @@ var Display = {
     Game.Context.beginPath();
     Game.Context.arc(position.x - Display.Camera.x, position.y - Display.Camera.y, r, 0, 2 * Math.PI);
     Game.Context.fill();
+    return true;
+  },
+  draw_ring: function(position, r, thickness, color) {
+    if (!Game.Context) {
+      return false;
+    }
+    Game.Context.strokeStyle = color;
+    Game.Context.beginPath();
+    Game.Context.arc(position.x - Display.Camera.x, position.y - Display.Camera.y, r, 0, 2 * Math.PI);
+    Game.Context.lineWidth = thickness;
+    Game.Context.stroke();
     return true;
   },
   draw_line: function(start, end, color) {
@@ -183,6 +202,21 @@ var Input = {
     document.addEventListener("mouseup", function(event) {
       Input.Mouse_Down = false;
     });
+  },
+  update: function() {
+    if (CONFIG.DEBUG_INPUT) {
+      console.log(Input.Keys);
+    }
+    const player = Player.get(Game.Player);
+    if (!player) {
+      return false;
+    }
+    const gun = Gun.get(Game.Gun);
+    if (!gun) {
+      return false;
+    }
+    const mouse_in_world = Vector.add(Input.Mouse, Display.Camera);
+    Display.draw_ring(mouse_in_world, 12, 2, "white");
   }
 };
 var Player = {
@@ -516,6 +550,7 @@ var Game = {
     Game.Context.fillStyle = "black";
     Game.Context.fillRect(0, 0, CONFIG.DISPLAY_WIDTH, CONFIG.DISPLAY_HEIGHT);
     Input.initialize();
+    Display.intialize();
     Game.Player = Player.create({ x: CONFIG.DISPLAY_WIDTH / 2, y: CONFIG.DISPLAY_HEIGHT / 2 });
     Game.Gun = Gun.create();
     Game.Loop = setInterval(Game.update, 1000 / CONFIG.FPS);
@@ -535,6 +570,7 @@ var Game = {
     Monster.update();
     Projectile.update();
     Orb.update();
+    Input.update();
     if (CONFIG.DEBUG_RENDERER) {
       Debug.update();
     }

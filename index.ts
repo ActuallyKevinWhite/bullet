@@ -86,6 +86,14 @@ const Vector = {
 }
 const Display = {
     Camera: { x: 0, y: 0 },
+    intialize: function () {
+        Game.Canvas!.addEventListener('mouseenter', function () {
+            Game.Canvas!.style.cursor = 'none';
+        })
+        Game.Canvas!.addEventListener('mouseleave', function () {
+            Game.Canvas!.style.cursor = 'default';
+        })
+    },
     clear: function (color: string = "black") {
         if (!Game.Context) { return false; }
         Game.Context.fillStyle = color;
@@ -115,6 +123,19 @@ const Display = {
             r, 0, 2 * Math.PI
         );
         Game.Context.fill();
+        return true;
+    },
+    draw_ring: function (position: Vector, r: number, thickness: number, color: string) {
+        if (!Game.Context) { return false; }
+        Game.Context.strokeStyle = color;
+        Game.Context.beginPath();
+        Game.Context.arc(
+            position.x - Display.Camera.x,
+            position.y - Display.Camera.y,
+            r, 0, 2 * Math.PI
+        );
+        Game.Context.lineWidth = thickness;
+        Game.Context.stroke();
         return true;
     },
     draw_line: function (start: Vector, end: Vector, color: string) {
@@ -200,6 +221,15 @@ const Input = {
             }
         );
     },
+    update: function () {
+        if (CONFIG.DEBUG_INPUT) { console.log(Input.Keys); }
+        const player = Player.get(Game.Player);
+        if (!player) { return false; }
+        const gun = Gun.get(Game.Gun);
+        if (!gun) { return false; }
+        const mouse_in_world = Vector.add(Input.Mouse, Display.Camera);
+        Display.draw_ring(mouse_in_world, 12, 2, 'white');
+    }
 }
 interface Player {
     Position:   Vector,
@@ -593,6 +623,7 @@ const Game = {
         Game.Context.fillRect(0, 0, CONFIG.DISPLAY_WIDTH, CONFIG.DISPLAY_HEIGHT);
 
         Input.initialize();
+        Display.intialize();
 
         Game.Player = Player.create({ x: CONFIG.DISPLAY_WIDTH / 2, y: CONFIG.DISPLAY_HEIGHT / 2 });
         Game.Gun  = Gun.create()
@@ -614,7 +645,9 @@ const Game = {
         Projectile.update();
         // Move the orbs
         Orb.update();
-        // Draw player
+        // Draw aiming reticle
+        Input.update();
+        // Debug stuff
         if (CONFIG.DEBUG_RENDERER) { Debug.update(); }
 
         if (CONFIG.DEBUG_PERFORMANCE) {
