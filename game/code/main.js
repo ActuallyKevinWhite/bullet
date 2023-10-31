@@ -4,6 +4,7 @@ var CONFIG = {
   DISPLAY_WIDTH: 512,
   DISPLAY_HEIGHT: 320,
   DEBUG_INPUT: false,
+  DEBUG_PERFORMANCE: true,
   FPS: 60
 };
 var Vector = {
@@ -67,6 +68,16 @@ var Display = {
     Game.Context.lineTo(end.x, end.y);
     Game.Context.stroke();
     return true;
+  },
+  draw_text: function(position, text) {
+    if (!Game.Context) {
+      return false;
+    }
+    Game.Context.fillStyle = "white";
+    const size = 16;
+    Game.Context.font = `${size}px Arial`;
+    Game.Context.textAlign = "center";
+    Game.Context.fillText(text, position.x, position.y + size / 2);
   }
 };
 var Input = {
@@ -118,6 +129,45 @@ var Player = {
     return Player.list.find((player) => player.uuid === uuid);
   }
 };
+var Monster = {
+  list: [],
+  create: function(position, dimensions = { x: 32, y: 32 }, health = { x: 10, y: 10 }) {
+    const monster = {
+      Position: position,
+      Dimensions: dimensions,
+      uuid: Player.uuid++,
+      Health: health
+    };
+    Monster.list.push(monster);
+    return monster.uuid;
+  },
+  get: function(uuid) {
+    return Monster.list.find((monster) => monster.uuid === uuid);
+  },
+  update: function() {
+    if (Game.time_frames % (CONFIG.FPS * 0.5) === 0) {
+      const x = Math.random() * CONFIG.DISPLAY_WIDTH;
+      const y = Math.random() * CONFIG.DISPLAY_HEIGHT;
+      Monster.create({ x, y });
+    }
+    for (let m = 0;m < Monster.list.length; m++) {
+      const monster = Monster.list[m];
+      if (monster.Health.x <= 0) {
+        Monster.list.splice(m, 1);
+        m--;
+        continue;
+      }
+      const player = Player.get(Game.Player);
+      if (!player) {
+        continue;
+      }
+      const direction = Vector.normalize(Vector.subtract(player.Position, monster.Position));
+      monster.Position.x += direction.x;
+      monster.Position.y += direction.y;
+      Display.draw_rectangle(monster.Position, monster.Dimensions, "blue");
+    }
+  }
+};
 var Projectile = {
   good_list: [],
   evil_list: [],
@@ -146,6 +196,17 @@ var Projectile = {
         Projectile.good_list.splice(g, 1);
         g--;
         continue;
+      }
+      for (let m = 0;m < Monster.list.length; m++) {
+        const monster = Monster.list[m];
+        if (Math.abs(projectile.Position.x - monster.Position.x) < monster.Dimensions.x / 2) {
+          if (Math.abs(projectile.Position.y - monster.Position.y) < monster.Dimensions.y / 2) {
+            monster.Health.x -= projectile.damage;
+            Projectile.good_list.splice(g, 1);
+            g--;
+            break;
+          }
+        }
       }
       Display.draw_circle(projectile.Position, projectile.Dimensions.x, "green");
     }
@@ -177,6 +238,9 @@ var Game = {
   Canvas: null,
   Context: null,
   Loop: null,
+  time_frames: 0,
+  time_ms: 0,
+  Player: -1,
   initialize: function() {
     Game.Canvas = document.getElementById(CONFIG.DISPLAY_NAME);
     Game.Context = Game.Canvas.getContext("2d");
@@ -185,7 +249,7 @@ var Game = {
     Game.Context.fillStyle = "black";
     Game.Context.fillRect(0, 0, CONFIG.DISPLAY_WIDTH, CONFIG.DISPLAY_HEIGHT);
     Input.initialize();
-    Player.create({ x: CONFIG.DISPLAY_WIDTH / 2, y: CONFIG.DISPLAY_HEIGHT / 2 });
+    Game.Player = Player.create({ x: CONFIG.DISPLAY_WIDTH / 2, y: CONFIG.DISPLAY_HEIGHT / 2 });
     Game.Loop = setInterval(Game.update, 1000 / CONFIG.FPS);
   },
   update: function() {
@@ -208,12 +272,20 @@ var Game = {
     }
     if (Input.Mouse_Down) {
       const direction = Vector.normalize(Vector.subtract(Input.Mouse, player.Position));
-      Projectile.create(Vector.add(player.Position, Vector.scale(direction, 32)), Vector.scale(direction, 10), 10, 10, 60, true);
+      Projectile.create(Vector.add(player.Position, Vector.scale(direction, 32)), Vector.scale(direction, 10), 1, 5, 60, true);
     }
+    Monster.update();
     Projectile.update();
     Display.draw_rectangle(player.Position, { x: 32, y: 32 }, "red");
     Display.draw_circle(Input.Mouse, 4, "blue");
     Display.draw_line(player.Position, Input.Mouse, "white");
+    if (CONFIG.DEBUG_PERFORMANCE) {
+      const new_time_ms = performance.now();
+      const delta_time_ms = new_time_ms - Game.time_ms;
+      Display.draw_text(player.Position, `FPS: ${Math.round(1000 / delta_time_ms)}`);
+      Game.time_ms = new_time_ms;
+    }
+    Game.time_frames++;
   }
 };
 document.addEventListener("DOMContentLoaded", () => {
