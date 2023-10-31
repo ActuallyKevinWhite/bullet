@@ -6,7 +6,8 @@ const CONFIG = {
     DISPLAY_HEIGHT: 320,
 
     DEBUG_INPUT: false,
-    DEBUG_PERFORMANCE: true,
+    DEBUG_PERFORMANCE: false,
+    DEBUG_RENDERER: true,
 
     FPS: 60,
 }
@@ -39,6 +40,7 @@ const Vector = {
     }
 }
 const Display = {
+    Camera: { x: 0, y: 0 },
     clear: function (color: string = "black") {
         if (!Game.Context) { return false; }
         Game.Context.fillStyle = color;
@@ -49,14 +51,24 @@ const Display = {
     draw_rectangle: function (position: Vector, dimensions: Vector, color: string) {
         if (!Game.Context) { return false; }
         Game.Context.fillStyle = color;
-        Game.Context.fillRect(position.x - dimensions.x / 2, position.y - dimensions.y / 2, dimensions.x, dimensions.y);
+        // Draw the rectangle centered on the position relative to the camera
+        Game.Context.fillRect(
+            position.x - dimensions.x / 2 - Display.Camera.x,
+            position.y - dimensions.y / 2 - Display.Camera.y,
+            dimensions.x,
+            dimensions.y
+        );
         return true;
     },
     draw_circle: function (position: Vector, r: number, color: string) {
         if (!Game.Context) { return false; }
         Game.Context.fillStyle = color;
         Game.Context.beginPath();
-        Game.Context.arc(position.x, position.y, r, 0, 2 * Math.PI);
+        Game.Context.arc(
+            position.x - Display.Camera.x,
+            position.y - Display.Camera.y,
+            r, 0, 2 * Math.PI
+        );
         Game.Context.fill();
         return true;
     },
@@ -64,8 +76,14 @@ const Display = {
         if (!Game.Context) { return false; }
         Game.Context.strokeStyle = color;
         Game.Context.beginPath();
-        Game.Context.moveTo(start.x, start.y);
-        Game.Context.lineTo(end.x, end.y);
+        Game.Context.moveTo(
+            start.x - Display.Camera.x,
+            start.y - Display.Camera.y
+        );
+        Game.Context.lineTo(
+            end.x - Display.Camera.x, 
+            end.y - Display.Camera.y
+        );
         Game.Context.stroke();
         return true;
     },
@@ -76,7 +94,18 @@ const Display = {
         const size = 16;
         Game.Context.font = `${size}px Arial`;
         Game.Context.textAlign = "center";
-        Game.Context.fillText(text, position.x, position.y + size / 2);
+        Game.Context.fillText(
+            text, 
+            position.x - Display.Camera.x, 
+            position.y + size / 2 - Display.Camera.y
+        );
+    },
+    update: function () {
+        const player = Player.get(Game.Player);
+        if (!player) { return false; }
+        Display.Camera.x = player.Position.x - CONFIG.DISPLAY_WIDTH / 2;
+        Display.Camera.y = player.Position.y - CONFIG.DISPLAY_HEIGHT / 2;
+        return true;
     }
 }
 const Input = {
@@ -139,6 +168,47 @@ const Player = {
     },
     get: function (uuid: number) {
         return Player.list.find(player => player.uuid === uuid);
+    },
+    update: function () {
+        const player = Player.get(Game.Player);
+        if (!player) { return false; }
+        if (Input.Keys["KeyW"]) { player.Position.y -= 5; }
+        if (Input.Keys["KeyA"]) { player.Position.x -= 5; }
+        if (Input.Keys["KeyS"]) { player.Position.y += 5; }
+        if (Input.Keys["KeyD"]) { player.Position.x += 5; }
+        // Clamp player to Arena
+        player.Position.x = Math.max(player.Position.x, 0);
+        player.Position.x = Math.min(player.Position.x, Game.Arena.x);
+        player.Position.y = Math.max(player.Position.y, 0);
+        player.Position.y = Math.min(player.Position.y, Game.Arena.y);
+        // Shoot a bullet in the direction of the mouse from the player
+        Display.update();
+        const mouse_to_camera = Vector.add(Input.Mouse, Display.Camera);
+        if (Input.Mouse_Down) {
+            const direction = Vector.normalize(Vector.subtract(mouse_to_camera, player.Position));
+            Projectile.create(
+                Vector.add(player.Position, Vector.scale(direction, 32)),
+                Vector.scale(direction, 10),
+                1,
+                5,
+                60,
+                true
+            );
+        }
+        // Render player
+        Display.draw_rectangle(player.Position, player.Dimensions, 'red');
+    }
+}
+const Debug = {
+    update: function () {
+        const player = Player.get(Game.Player);
+        if (!player) { return false; }
+        const mouse_in_world = Vector.add(Input.Mouse, Display.Camera);
+        Display.draw_rectangle(player.Position, { x: 32, y: 32 }, 'red')
+        // Draw the mouse position
+        Display.draw_circle(mouse_in_world, 4, 'blue');
+        // Draw line connecting them
+        Display.draw_line(player.Position, mouse_in_world, 'white');
     }
 }
 interface Monster {
@@ -262,6 +332,11 @@ const Projectile = {
         }
     }    
 }
+const Arena = {
+    update: function () {
+        Display.draw_rectangle({x: Game.Arena.x / 2, y: Game.Arena.y / 2}, Game.Arena, 'purple')
+    }
+}
 const Game = {
     Canvas:  null as HTMLCanvasElement        | null,
     Context: null as CanvasRenderingContext2D | null,
@@ -272,6 +347,8 @@ const Game = {
     time_ms:     0,
 
     Player: -1,
+
+    Arena: {x: 200, y: 200},
 
     initialize: function () {
         Game.Canvas  = document.getElementById(CONFIG.DISPLAY_NAME) as HTMLCanvasElement;
@@ -293,33 +370,15 @@ const Game = {
         const player = Player.get(0);
         if (!player) { return false; }
         Display.clear();
+        Arena.update();
         // Input
-        if (Input.Keys["KeyW"]) { player.Position.y -= 5; }
-        if (Input.Keys["KeyA"]) { player.Position.x -= 5; }
-        if (Input.Keys["KeyS"]) { player.Position.y += 5; }
-        if (Input.Keys["KeyD"]) { player.Position.x += 5; }
-        // Shoot a bullet in the direction of the mouse from the player
-        if (Input.Mouse_Down) {
-            const direction = Vector.normalize(Vector.subtract(Input.Mouse, player.Position));
-            Projectile.create(
-                Vector.add(player.Position, Vector.scale(direction, 32)),
-                Vector.scale(direction, 10),
-                1,
-                5,
-                60,
-                true
-            );
-        }
+        Player.update();
         // Move the mosnters
         Monster.update();
         // Move the projectiles
         Projectile.update();
         // Draw player
-        Display.draw_rectangle(player.Position, { x: 32, y: 32 }, 'red')
-        // Draw the mouse position
-        Display.draw_circle(Input.Mouse, 4, 'blue');
-        // Draw line connecting them
-        Display.draw_line(player.Position, Input.Mouse, 'white');
+        if (CONFIG.DEBUG_RENDERER) { Debug.update(); }
 
         if (CONFIG.DEBUG_PERFORMANCE) {
             const new_time_ms = performance.now();
