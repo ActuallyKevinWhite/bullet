@@ -12,17 +12,17 @@ interface Vector {
 }
 const Display = {
     // Centered for the sake of the bullet hell
-    draw_rectangle: function (x: number, y: number, w: number, h: number, color: string) {
+    draw_rectangle: function (position: Vector, dimensions: Vector, color: string) {
         if (!Game.Context) { return false; }
         Game.Context.fillStyle = color;
-        Game.Context.fillRect(x - w / 2, y - h / 2, w, h)
+        Game.Context.fillRect(position.x - dimensions.x / 2, position.y - dimensions.y / 2, dimensions.x, dimensions.y);
         return true;
     },
-    draw_circle: function (x: number, y: number, r: number, color: string) {
+    draw_circle: function (position: Vector, r: number, color: string) {
         if (!Game.Context) { return false; }
         Game.Context.fillStyle = color;
         Game.Context.beginPath();
-        Game.Context.arc(x, y, r, 0, 2 * Math.PI);
+        Game.Context.arc(position.x, position.y, r, 0, 2 * Math.PI);
         Game.Context.fill();
         return true;
     },
@@ -50,8 +50,8 @@ const Game = {
 
         Game.Context.fillStyle = "black";
         Game.Context.fillRect(0, 0, CONFIG.DISPLAY_WIDTH, CONFIG.DISPLAY_HEIGHT);
-        Display.draw_rectangle(100, 100, 32, 32, 'red')
-        Display.draw_circle(100, 100, 8, 'blue')
+        Display.draw_rectangle({ x: 100, y: 100 }, { x: 32, y: 32 }, 'red')
+        Display.draw_circle({ x: 100, y: 100 }, 8, 'blue')
         Display.draw_line({ x: 100, y: 100 }, { x: 200, y: 200 }, 'green')
     }
 }
