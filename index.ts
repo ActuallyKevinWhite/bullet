@@ -6,8 +6,17 @@ const CONFIG = {
     DISPLAY_HEIGHT: 320,
 
     DEBUG_INPUT: false,
-    DEBUG_PERFORMANCE: false,
-    DEBUG_RENDERER: true,
+    DEBUG_PERFORMANCE: true,
+    DEBUG_RENDERER: false,
+
+    DEBUG_GUN: true,
+
+    PERFORMANCE_ENTITY_LIMTER: false,
+
+    PROJECTILE_LIMIT_GOOD:  5000,
+    PROJECTILE_LIMIT_EVIL: 15000,
+
+    MONSTER_LIMIT: 1000,
 
     FPS: 60,
 }
@@ -44,6 +53,9 @@ const Vector = {
             x: a.x * Math.cos(angle) - a.y * Math.sin(angle),
             y: a.x * Math.sin(angle) + a.y * Math.cos(angle)
         };
+    },
+    clone: function (a: Vector) {
+        return { x: a.x, y: a.y };
     }
 }
 const Display = {
@@ -199,6 +211,16 @@ const Player = {
     }
 }
 const Debug = {
+    gun: function () {
+        const gun = Gun.get(Game.Gun);
+        if (!gun) { return false; }
+        if (Input.Keys["KeyQ"]) { gun.accuracy += 1; }
+        if (Input.Keys["KeyE"]) { gun.accuracy -= 1; }
+        if (Input.Keys["KeyR"]) { gun.projectiles   += 1; }
+        if (Input.Keys["KeyT"]) { gun.projectiles   -= 1; }
+        if (Input.Keys["KeyY"]) { gun.fire_rate.y   += 1; }
+        if (Input.Keys["KeyU"]) { gun.fire_rate.y   -= 1; }
+    },
     update: function () {
         const player = Player.get(Game.Player);
         if (!player) { return false; }
@@ -214,17 +236,22 @@ interface Monster {
     Position:   Vector,
     Dimensions: Vector,
     Health:     Vector, // x: current, y: max
-    uuid: number
+    uuid: number,
+    Gun: number,
 }
 const Monster = {
     uuid: 0,
     list: [] as Monster[],
+    Settings: {
+        spawn_rate_per_second: 1,
+    },
     create: function (position: Vector, dimensions: Vector = { x: 32, y: 32 }, health: Vector = { x: 10, y: 10 }) {
         const monster = {
             Position:   position,
             Dimensions: dimensions,
             uuid:       Monster.uuid++,
             Health:     health,
+            Gun:        Gun.create(5, 1, 2, 1, 1, 1, 60, false),
         }
         Monster.list.push(monster);
         return monster.uuid;
@@ -236,42 +263,45 @@ const Monster = {
         const player = Player.get(Game.Player);
         if (!player) { return false; }
 
-        if (Game.time_frames % (CONFIG.FPS * 0.5) === 0) {
-            // Spawn monsters off screen
-            const side = Math.floor(Math.random() * 4);
-            let position = {x: 0, y: 0}
-            switch (side) {
-                case 0: // Top
-                    position = { 
-                        x: player.Position.x - CONFIG.DISPLAY_WIDTH / 2 + Math.random() * CONFIG.DISPLAY_WIDTH,
-                        y: player.Position.y - CONFIG.DISPLAY_HEIGHT / 2 - Math.random() * 128
-                    };
-                    break;
-                case 1: // Right
-                    position = { 
-                        x: player.Position.x + CONFIG.DISPLAY_WIDTH / 2 + Math.random() * 128,
-                        y: player.Position.y - CONFIG.DISPLAY_HEIGHT / 2 + Math.random() * CONFIG.DISPLAY_HEIGHT
-                    };
-                    break;
-                case 2: // Bottom
-                    position = { 
-                        x: player.Position.x - CONFIG.DISPLAY_WIDTH / 2 + Math.random() * CONFIG.DISPLAY_WIDTH,
-                        y: player.Position.y + CONFIG.DISPLAY_HEIGHT / 2 + Math.random() * 128
-                    };
-                    break;
-                case 3: // Left
-                    position = { 
-                        x: player.Position.x - CONFIG.DISPLAY_WIDTH / 2 - Math.random() * 128,
-                        y: player.Position.y - CONFIG.DISPLAY_HEIGHT / 2 + Math.random() * CONFIG.DISPLAY_HEIGHT
-                    };
-                    break;
+        if (Game.time_frames % CONFIG.FPS / Monster.Settings.spawn_rate_per_second === 0) {
+            if (Monster.list.length < CONFIG.MONSTER_LIMIT) {
+                // Spawn monsters off screen
+                const side = Math.floor(Math.random() * 4);
+                let position = {x: 0, y: 0}
+                switch (side) {
+                    case 0: // Top
+                        position = { 
+                            x: player.Position.x - CONFIG.DISPLAY_WIDTH / 2 + Math.random() * CONFIG.DISPLAY_WIDTH,
+                            y: player.Position.y - CONFIG.DISPLAY_HEIGHT / 2 - Math.random() * 128
+                        };
+                        break;
+                    case 1: // Right
+                        position = { 
+                            x: player.Position.x + CONFIG.DISPLAY_WIDTH / 2 + Math.random() * 128,
+                            y: player.Position.y - CONFIG.DISPLAY_HEIGHT / 2 + Math.random() * CONFIG.DISPLAY_HEIGHT
+                        };
+                        break;
+                    case 2: // Bottom
+                        position = { 
+                            x: player.Position.x - CONFIG.DISPLAY_WIDTH / 2 + Math.random() * CONFIG.DISPLAY_WIDTH,
+                            y: player.Position.y + CONFIG.DISPLAY_HEIGHT / 2 + Math.random() * 128
+                        };
+                        break;
+                    case 3: // Left
+                        position = { 
+                            x: player.Position.x - CONFIG.DISPLAY_WIDTH / 2 - Math.random() * 128,
+                            y: player.Position.y - CONFIG.DISPLAY_HEIGHT / 2 + Math.random() * CONFIG.DISPLAY_HEIGHT
+                        };
+                        break;
+                }
+                Monster.create(position);
             }
-            Monster.create(position);
         }
         for (let m = 0; m < Monster.list.length; m++) {
             const monster = Monster.list[m];
             // Check if dead
             if (monster.Health.x <= 0) {
+                Gun.remove(monster.Gun);
                 Monster.list.splice(m, 1);
                 m--;
                 continue;
@@ -280,6 +310,8 @@ const Monster = {
             const direction = Vector.normalize(Vector.subtract(player.Position, monster.Position));
             monster.Position.x += direction.x;
             monster.Position.y += direction.y;
+            // Shoot at player
+            Gun.fire(monster.Gun, Vector.clone(monster.Position), direction);
             // Render monster
             Display.draw_rectangle(monster.Position, monster.Dimensions, 'blue');
         }
@@ -311,6 +343,11 @@ const Projectile = {
         return true;
     },
     update: function () {
+        if (Projectile.good_list.length > CONFIG.PROJECTILE_LIMIT_GOOD && CONFIG.PERFORMANCE_ENTITY_LIMTER) {
+            // Remove the newest projectiles
+            const excess = Projectile.good_list.length - CONFIG.PROJECTILE_LIMIT_GOOD;
+            Projectile.good_list.splice(CONFIG.PROJECTILE_LIMIT_GOOD, excess);
+        }
         for (let g = 0; g < Projectile.good_list.length; g++) {
             const projectile = Projectile.good_list[g];
             projectile.Position.x += projectile.Velocity.x;
@@ -335,6 +372,11 @@ const Projectile = {
             }
             Display.draw_circle(projectile.Position, projectile.Dimensions.x, 'green');
         }
+        if (Projectile.evil_list.length > CONFIG.PROJECTILE_LIMIT_EVIL && CONFIG.PERFORMANCE_ENTITY_LIMTER) {
+            // Remove the newest projectiles
+            const excess = Projectile.evil_list.length - CONFIG.PROJECTILE_LIMIT_EVIL;
+            Projectile.evil_list.splice(CONFIG.PROJECTILE_LIMIT_EVIL, excess);
+        }
         for (let e = 0; e < Projectile.evil_list.length; e++) {
             const projectile = Projectile.evil_list[e];
             projectile.Position.x += projectile.Velocity.x;
@@ -357,6 +399,7 @@ const Projectile = {
                     }
                 }
             }
+            Display.draw_circle(projectile.Position, projectile.Dimensions.x, 'blue');
         }
     }    
 }
@@ -429,7 +472,7 @@ const Gun = {
         for (let p = 0; p < gun_data.projectiles; p++) {
             console.log
             Projectile.create(
-                position,
+                Vector.clone(position),
                 Vector.rotate(Vector.scale(direction, gun_data.bullet_speed), (Math.random() - 0.5) * gun_data.accuracy),
                 gun_data.damage,
                 gun_data.bullet_size,
@@ -437,11 +480,17 @@ const Gun = {
                 gun_data.good
             );
         }
+    },
+    remove: function (uuid: number) {
+        const gun = Gun.get(uuid);
+        if (!gun) { return false; }
+        Gun.list.splice(uuid, 1);
+        return true;
     }
 }
 const Arena = {
     Settings: {
-        Dimensions: {x: 200, y: 200}
+        Dimensions: {x: 1000, y: 1000}
     },
     update: function () {
         Display.draw_rectangle({x: Arena.Settings.Dimensions.x / 2, y: Arena.Settings.Dimensions.y / 2}, Arena.Settings.Dimensions, 'purple')
@@ -479,6 +528,8 @@ const Game = {
     update: function () {
         const player = Player.get(0);
         if (!player) { return false; }
+        // Increase gun spread
+        if (CONFIG.DEBUG_GUN) {Debug.gun();}
         Display.clear();
         Arena.update();
         // Input
@@ -496,6 +547,7 @@ const Game = {
             const delta_time_ms = new_time_ms - Game.time_ms;
             Display.draw_text(player.Position, `FPS: ${Math.round(1000 / delta_time_ms)}`);
             Game.time_ms = new_time_ms;
+            Display.draw_text({x: player.Position.x, y: player.Position.y + 16}, `Entities: ${Player.list.length + Monster.list.length + Projectile.good_list.length + Projectile.evil_list.length}`);
         }
         Game.time_frames++;
     }
