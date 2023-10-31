@@ -3,9 +3,9 @@ var CONFIG = {
   DISPLAY_NAME: "display",
   DISPLAY_WIDTH: 640,
   DISPLAY_HEIGHT: 480,
+  DEBUG_INPUT: true,
   FPS: 60
 };
-console.log("Hello via Bun!");
 var Display = {
   clear: function(color = "black") {
     if (!Game.Context) {
@@ -45,6 +45,38 @@ var Display = {
     return true;
   }
 };
+var Input = {
+  Mouse: { x: 0, y: 0 },
+  Mouse_Down: false,
+  Keys: {},
+  initialize: function() {
+    document.addEventListener("keydown", function(event) {
+      if (CONFIG.DEBUG_INPUT) {
+        console.log(event.code);
+      }
+      Input.Keys[event.code] = true;
+    });
+    document.addEventListener("keyup", function(event) {
+      if (CONFIG.DEBUG_INPUT) {
+        console.log(event.code);
+      }
+      Input.Keys[event.code] = false;
+    });
+    document.addEventListener("mousemove", function(event) {
+      const rect = Game.Canvas?.getBoundingClientRect();
+      if (rect) {
+        Input.Mouse.x = event.clientX - rect.left;
+        Input.Mouse.y = event.clientY - rect.top;
+      }
+    });
+    document.addEventListener("mousedown", function(event) {
+      Input.Mouse_Down = true;
+    });
+    document.addEventListener("mouseup", function(event) {
+      Input.Mouse_Down = false;
+    });
+  }
+};
 var Player = {
   uuid: 0,
   list: [],
@@ -71,15 +103,31 @@ var Game = {
     Game.Canvas.height = CONFIG.DISPLAY_HEIGHT;
     Game.Context.fillStyle = "black";
     Game.Context.fillRect(0, 0, CONFIG.DISPLAY_WIDTH, CONFIG.DISPLAY_HEIGHT);
+    Input.initialize();
     Player.create({ x: CONFIG.DISPLAY_WIDTH / 2, y: CONFIG.DISPLAY_HEIGHT / 2 });
     Game.Loop = setInterval(Game.update, 1000 / CONFIG.FPS);
   },
   update: function() {
-    Display.clear();
     const player = Player.get(0);
-    if (player) {
-      Display.draw_rectangle(player.Position, { x: 32, y: 32 }, "red");
+    if (!player) {
+      return false;
     }
+    if (Input.Keys["KeyW"]) {
+      player.Position.y -= 5;
+    }
+    if (Input.Keys["KeyA"]) {
+      player.Position.x -= 5;
+    }
+    if (Input.Keys["KeyS"]) {
+      player.Position.y += 5;
+    }
+    if (Input.Keys["KeyD"]) {
+      player.Position.x += 5;
+    }
+    Display.clear();
+    Display.draw_rectangle(player.Position, { x: 32, y: 32 }, "red");
+    Display.draw_circle(Input.Mouse, 4, "blue");
+    Display.draw_line(player.Position, Input.Mouse, "white");
   }
 };
 document.addEventListener("DOMContentLoaded", () => {

@@ -5,9 +5,10 @@ const CONFIG = {
     DISPLAY_WIDTH: 640,
     DISPLAY_HEIGHT: 480,
 
+    DEBUG_INPUT: false,
+
     FPS: 60,
 }
-console.log("Hello via Bun!");
 interface Vector {
     x: number,
     y: number
@@ -43,6 +44,45 @@ const Display = {
         Game.Context.stroke();
         return true;
     }
+}
+const Input = {
+    Mouse: {x: 0, y: 0},
+    Mouse_Down: false,
+    Keys: {} as {[key: string]: boolean},
+
+    initialize: function () {
+        document.addEventListener("keydown",
+            function (event) {
+                if (CONFIG.DEBUG_INPUT) { console.log(event.code); }
+                Input.Keys[event.code] = true;
+            }
+        );
+        document.addEventListener("keyup",
+            function (event) {
+                if (CONFIG.DEBUG_INPUT) { console.log(event.code); }
+                Input.Keys[event.code] = false;
+            }
+        );
+        document.addEventListener("mousemove",
+            function (event) {
+                const rect = Game.Canvas?.getBoundingClientRect();
+                if (rect) {
+                    Input.Mouse.x = event.clientX - rect.left;
+                    Input.Mouse.y = event.clientY - rect.top;
+                }
+            }
+        );
+        document.addEventListener("mousedown",
+            function (event) {
+                Input.Mouse_Down = true;
+            }
+        );
+        document.addEventListener("mouseup",
+            function (event) {
+                Input.Mouse_Down = false;
+            }
+        );
+    },
 }
 interface Player {
     Position: Vector,
@@ -80,19 +120,28 @@ const Game = {
         Game.Context.fillStyle = "black";
         Game.Context.fillRect(0, 0, CONFIG.DISPLAY_WIDTH, CONFIG.DISPLAY_HEIGHT);
 
+        Input.initialize();
+
         Player.create({ x: CONFIG.DISPLAY_WIDTH / 2, y: CONFIG.DISPLAY_HEIGHT / 2 });
 
         Game.Loop = setInterval(Game.update, 1000 / CONFIG.FPS);
     },
     update: function () {
+        const player = Player.get(0);
+        if (!player) { return false; }
+        // Input
+        if (Input.Keys["KeyW"]) { player.Position.y -= 5; }
+        if (Input.Keys["KeyA"]) { player.Position.x -= 5; }
+        if (Input.Keys["KeyS"]) { player.Position.y += 5; }
+        if (Input.Keys["KeyD"]) { player.Position.x += 5; }        
         // Clear the screen
         Display.clear();
         // Draw player
-        const player = Player.get(0);
-        if (player) {
-            Display.draw_rectangle(player.Position, { x: 32, y: 32 }, 'red')
-        }
-        // Draw the mouse position later
+        Display.draw_rectangle(player.Position, { x: 32, y: 32 }, 'red')
+        // Draw the mouse position
+        Display.draw_circle(Input.Mouse, 4, 'blue');
+        // Draw line connecting them
+        Display.draw_line(player.Position, Input.Mouse, 'white');
     }
 }
 
