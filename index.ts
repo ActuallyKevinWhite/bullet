@@ -2,16 +2,41 @@
 /// <reference lib="dom.iterable" />
 const CONFIG = {
     DISPLAY_NAME: "display",
-    DISPLAY_WIDTH: 640,
-    DISPLAY_HEIGHT: 480,
+    DISPLAY_WIDTH: 512,
+    DISPLAY_HEIGHT: 320,
 
     DEBUG_INPUT: false,
+    DEBUG_PERFORMANCE: true,
 
     FPS: 60,
 }
 interface Vector {
     x: number,
     y: number
+}
+const Vector = {
+    add: function (a: Vector, b: Vector) {
+        return { x: a.x + b.x, y: a.y + b.y };
+    },
+    subtract: function (a: Vector, b: Vector) {
+        return { x: a.x - b.x, y: a.y - b.y };
+    },
+    multiply: function (a: Vector, b: Vector) {
+        return { x: a.x * b.x, y: a.y * b.y };
+    },
+    divide: function (a: Vector, b: Vector) {
+        return { x: a.x / b.x, y: a.y / b.y };
+    },
+    magnitude: function (a: Vector) {
+        return Math.sqrt(a.x * a.x + a.y * a.y);
+    },
+    normalize: function (a: Vector) {
+        const magnitude = Vector.magnitude(a);
+        return { x: a.x / magnitude, y: a.y / magnitude };
+    },
+    scale: function (a: Vector, scalar: number) {
+        return { x: a.x * scalar, y: a.y * scalar };
+    }
 }
 const Display = {
     clear: function (color: string = "black") {
@@ -85,16 +110,20 @@ const Input = {
     },
 }
 interface Player {
-    Position: Vector,
+    Position:   Vector,
+    Dimensions: Vector,
+    Health:     Vector, // x: current, y: max
     uuid: number
 }
 const Player = {
     uuid: 0,
     list: [] as Player[],
-    create: function (position: Vector) {
+    create: function (position: Vector, dimensions: Vector = { x: 32, y: 32 }, health: Vector = { x: 3, y: 3 }) {
         const player = {
-            Position: position,
-            uuid: Player.uuid++,
+            Position:   position,
+            Dimensions: dimensions,
+            uuid:       Player.uuid++,
+            Health:     health,
         }
         Player.list.push(player);
         return player.uuid;
@@ -103,12 +132,78 @@ const Player = {
         return Player.list.find(player => player.uuid === uuid);
     }
 }
-
+interface Projectile {
+    Position:   Vector,
+    Velocity:   Vector,
+    Dimensions: Vector,
+    damage:     number, // How much HP it does
+    Timer:      Vector, // How long it lasts
+}
+const Projectile = {
+    good_list: [] as Projectile[],
+    evil_list: [] as Projectile[],
+    create: function (position: Vector, velocity: Vector, damage: number, size: number, duration: number, good: boolean) {
+        const projectile = {
+            Position: position,
+            Velocity: velocity,
+            damage:   damage,
+            Timer:    {x: 0, y: duration},
+            Dimensions: {x: size, y: size},
+        }
+        if (good) {
+            Projectile.good_list.push(projectile);
+        } else {
+            Projectile.evil_list.push(projectile);
+        }
+        return true;
+    },
+    update: function () {
+        for (let g = 0; g < Projectile.good_list.length; g++) {
+            const projectile = Projectile.good_list[g];
+            projectile.Position.x += projectile.Velocity.x;
+            projectile.Position.y += projectile.Velocity.y;
+            projectile.Timer.x++;
+            if (projectile.Timer.x >= projectile.Timer.y) {
+                Projectile.good_list.splice(g, 1);
+                g--;
+                continue;
+            }
+            // TODO: Check for collisions with Monsters
+            // Finally draw the projectile
+            Display.draw_circle(projectile.Position, projectile.Dimensions.x, 'green');
+        }
+        for (let e = 0; e < Projectile.evil_list.length; e++) {
+            const projectile = Projectile.evil_list[e];
+            projectile.Position.x += projectile.Velocity.x;
+            projectile.Position.y += projectile.Velocity.y;
+            projectile.Timer.x++;
+            if (projectile.Timer.x >= projectile.Timer.y) {
+                Projectile.evil_list.splice(e, 1);
+                e--;
+                continue;
+            }
+            // Check for collisions with Player
+            for (let p = 0; p < Player.list.length; p++) {
+                const player = Player.list[p];
+                if (Math.abs(projectile.Position.x - player.Position.x) < player.Dimensions.x / 2) {
+                    if (Math.abs(projectile.Position.y - player.Position.y) < player.Dimensions.y / 2) {
+                        player.Health.x -= 1; // TODO: Damage the player
+                        Projectile.evil_list.splice(e, 1);
+                        e--;
+                        break;
+                    }
+                }
+            }
+        }
+    }    
+}
 const Game = {
     Canvas:  null as HTMLCanvasElement        | null,
     Context: null as CanvasRenderingContext2D | null,
 
     Loop: null as Timer | null,
+
+    Timer: 0,
 
     initialize: function () {
         Game.Canvas  = document.getElementById(CONFIG.DISPLAY_NAME) as HTMLCanvasElement;
@@ -129,13 +224,26 @@ const Game = {
     update: function () {
         const player = Player.get(0);
         if (!player) { return false; }
+        Display.clear();
         // Input
         if (Input.Keys["KeyW"]) { player.Position.y -= 5; }
         if (Input.Keys["KeyA"]) { player.Position.x -= 5; }
         if (Input.Keys["KeyS"]) { player.Position.y += 5; }
-        if (Input.Keys["KeyD"]) { player.Position.x += 5; }        
-        // Clear the screen
-        Display.clear();
+        if (Input.Keys["KeyD"]) { player.Position.x += 5; }
+        // Shoot a bullet in the direction of the mouse from the player
+        if (Input.Mouse_Down) {
+            const direction = Vector.normalize(Vector.subtract(Input.Mouse, player.Position));
+            Projectile.create(
+                Vector.add(player.Position, Vector.scale(direction, 32)),
+                Vector.scale(direction, 10),
+                10,
+                10,
+                60,
+                true
+            );
+        }
+        // Move the projectiles
+        Projectile.update();
         // Draw player
         Display.draw_rectangle(player.Position, { x: 32, y: 32 }, 'red')
         // Draw the mouse position
@@ -144,9 +252,6 @@ const Game = {
         Display.draw_line(player.Position, Input.Mouse, 'white');
     }
 }
-
-
-
 document.addEventListener("DOMContentLoaded", () => {
     Game.initialize();
 });
