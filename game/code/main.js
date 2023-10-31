@@ -13,6 +13,42 @@ var CONFIG = {
   MONSTER_LIMIT: 1000,
   FPS: 60
 };
+var Debug = {
+  gun: function() {
+    const gun = Gun.get(Game.Gun);
+    if (!gun) {
+      return false;
+    }
+    if (Input.Keys["KeyQ"]) {
+      gun.accuracy += 1;
+    }
+    if (Input.Keys["KeyE"]) {
+      gun.accuracy -= 1;
+    }
+    if (Input.Keys["KeyR"]) {
+      gun.projectiles += 1;
+    }
+    if (Input.Keys["KeyT"]) {
+      gun.projectiles -= 1;
+    }
+    if (Input.Keys["KeyY"]) {
+      gun.fire_rate.y += 1;
+    }
+    if (Input.Keys["KeyU"]) {
+      gun.fire_rate.y -= 1;
+    }
+  },
+  update: function() {
+    const player = Player.get(Game.Player);
+    if (!player) {
+      return false;
+    }
+    const mouse_in_world = Vector.add(Input.Mouse, Display.Camera);
+    Display.draw_rectangle(player.Position, { x: 32, y: 32 }, "red");
+    Display.draw_circle(mouse_in_world, 4, "blue");
+    Display.draw_line(player.Position, mouse_in_world, "white");
+  }
+};
 var Vector = {
   add: function(a, b) {
     return { x: a.x + b.x, y: a.y + b.y };
@@ -31,6 +67,9 @@ var Vector = {
   },
   normalize: function(a) {
     const magnitude = Vector.magnitude(a);
+    if (magnitude === 0) {
+      return { x: 0, y: 0 };
+    }
     return { x: a.x / magnitude, y: a.y / magnitude };
   },
   scale: function(a, scalar) {
@@ -146,7 +185,9 @@ var Player = {
       Position: position,
       Dimensions: dimensions,
       uuid: Player.uuid++,
-      Health: health
+      Health: health,
+      speed: 5,
+      magnetism: 128
     };
     Player.list.push(player);
     return player.uuid;
@@ -159,18 +200,22 @@ var Player = {
     if (!player) {
       return false;
     }
+    const direction = Vector.clone({ x: 0, y: 0 });
     if (Input.Keys["KeyW"]) {
-      player.Position.y -= 5;
-    }
-    if (Input.Keys["KeyA"]) {
-      player.Position.x -= 5;
+      direction.y -= player.speed;
     }
     if (Input.Keys["KeyS"]) {
-      player.Position.y += 5;
+      direction.y += player.speed;
+    }
+    if (Input.Keys["KeyA"]) {
+      direction.x -= player.speed;
     }
     if (Input.Keys["KeyD"]) {
-      player.Position.x += 5;
+      direction.x += player.speed;
     }
+    let normalized = Vector.normalize(direction);
+    let scaled = Vector.scale(normalized, player.speed);
+    player.Position = Vector.add(player.Position, scaled);
     player.Position.x = Math.max(player.Position.x, 0);
     player.Position.x = Math.min(player.Position.x, Arena.Settings.Dimensions.x);
     player.Position.y = Math.max(player.Position.y, 0);
@@ -181,42 +226,6 @@ var Player = {
       Gun.fire(Game.Gun, Vector.add({ x: 0, y: 0 }, player.Position), Vector.normalize(Vector.subtract(mouse_to_camera, player.Position)));
     }
     Display.draw_rectangle(player.Position, player.Dimensions, "red");
-  }
-};
-var Debug = {
-  gun: function() {
-    const gun = Gun.get(Game.Gun);
-    if (!gun) {
-      return false;
-    }
-    if (Input.Keys["KeyQ"]) {
-      gun.accuracy += 1;
-    }
-    if (Input.Keys["KeyE"]) {
-      gun.accuracy -= 1;
-    }
-    if (Input.Keys["KeyR"]) {
-      gun.projectiles += 1;
-    }
-    if (Input.Keys["KeyT"]) {
-      gun.projectiles -= 1;
-    }
-    if (Input.Keys["KeyY"]) {
-      gun.fire_rate.y += 1;
-    }
-    if (Input.Keys["KeyU"]) {
-      gun.fire_rate.y -= 1;
-    }
-  },
-  update: function() {
-    const player = Player.get(Game.Player);
-    if (!player) {
-      return false;
-    }
-    const mouse_in_world = Vector.add(Input.Mouse, Display.Camera);
-    Display.draw_rectangle(player.Position, { x: 32, y: 32 }, "red");
-    Display.draw_circle(mouse_in_world, 4, "blue");
-    Display.draw_line(player.Position, mouse_in_world, "white");
   }
 };
 var Monster = {
@@ -283,6 +292,7 @@ var Monster = {
         Gun.remove(monster.Gun);
         Monster.list.splice(m, 1);
         m--;
+        Orb.create(monster.Position);
         continue;
       }
       const direction = Vector.normalize(Vector.subtract(player.Position, monster.Position));
@@ -433,6 +443,46 @@ var Gun = {
     return true;
   }
 };
+var Orb = {
+  uuid: 0,
+  list: [],
+  create: function(position, dimensions = { x: 8, y: 8 }) {
+    const orb = {
+      Position: position,
+      Dimensions: dimensions,
+      uuid: Orb.uuid++
+    };
+    Orb.list.push(orb);
+    return orb.uuid;
+  },
+  get: function(uuid) {
+    return Orb.list.find((orb) => orb.uuid === uuid);
+  },
+  update: function() {
+    const player = Player.get(Game.Player);
+    if (!player) {
+      return false;
+    }
+    for (let o = 0;o < Orb.list.length; o++) {
+      const orb = Orb.list[o];
+      const direction = Vector.subtract(player.Position, orb.Position);
+      const distance = Vector.magnitude(direction);
+      if (distance < player.magnetism) {
+        orb.Position.x += direction.x / distance * player.speed * 1.25;
+        orb.Position.y += direction.y / distance * player.speed * 1.25;
+      }
+      if (Math.abs(orb.Position.x - player.Position.x) < player.Dimensions.x / 2) {
+        if (Math.abs(orb.Position.y - player.Position.y) < player.Dimensions.y / 2) {
+          Orb.list.splice(o, 1);
+          o--;
+          Game.Experience++;
+          continue;
+        }
+      }
+      Display.draw_circle(orb.Position, orb.Dimensions.x, "yellow");
+    }
+  }
+};
 var Arena = {
   Settings: {
     Dimensions: { x: 1000, y: 1000 }
@@ -449,6 +499,7 @@ var Game = {
   time_ms: 0,
   Player: -1,
   Gun: -1,
+  Experience: 0,
   initialize: function() {
     Game.Canvas = document.getElementById(CONFIG.DISPLAY_NAME);
     Game.Context = Game.Canvas.getContext("2d");
@@ -475,6 +526,7 @@ var Game = {
     Player.update();
     Monster.update();
     Projectile.update();
+    Orb.update();
     if (CONFIG.DEBUG_RENDERER) {
       Debug.update();
     }

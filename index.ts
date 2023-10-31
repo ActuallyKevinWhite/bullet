@@ -20,6 +20,28 @@ const CONFIG = {
 
     FPS: 60,
 }
+const Debug = {
+    gun: function () {
+        const gun = Gun.get(Game.Gun);
+        if (!gun) { return false; }
+        if (Input.Keys["KeyQ"]) { gun.accuracy += 1; }
+        if (Input.Keys["KeyE"]) { gun.accuracy -= 1; }
+        if (Input.Keys["KeyR"]) { gun.projectiles   += 1; }
+        if (Input.Keys["KeyT"]) { gun.projectiles   -= 1; }
+        if (Input.Keys["KeyY"]) { gun.fire_rate.y   += 1; }
+        if (Input.Keys["KeyU"]) { gun.fire_rate.y   -= 1; }
+    },
+    update: function () {
+        const player = Player.get(Game.Player);
+        if (!player) { return false; }
+        const mouse_in_world = Vector.add(Input.Mouse, Display.Camera);
+        Display.draw_rectangle(player.Position, { x: 32, y: 32 }, 'red')
+        // Draw the mouse position
+        Display.draw_circle(mouse_in_world, 4, 'blue');
+        // Draw line connecting them
+        Display.draw_line(player.Position, mouse_in_world, 'white');
+    }
+}
 interface Vector {
     x: number,
     y: number
@@ -42,6 +64,7 @@ const Vector = {
     },
     normalize: function (a: Vector) {
         const magnitude = Vector.magnitude(a);
+        if (magnitude === 0) { return { x: 0, y: 0 }; }
         return { x: a.x / magnitude, y: a.y / magnitude };
     },
     scale: function (a: Vector, scalar: number) {
@@ -170,6 +193,8 @@ interface Player {
     Position:   Vector,
     Dimensions: Vector,
     Health:     Vector, // x: current, y: max
+    magnetism:  number,
+    speed:      number,
     uuid: number
 }
 const Player = {
@@ -181,6 +206,8 @@ const Player = {
             Dimensions: dimensions,
             uuid:       Player.uuid++,
             Health:     health,
+            speed:      5,
+            magnetism:  128,
         }
         Player.list.push(player);
         return player.uuid;
@@ -191,10 +218,15 @@ const Player = {
     update: function () {
         const player = Player.get(Game.Player);
         if (!player) { return false; }
-        if (Input.Keys["KeyW"]) { player.Position.y -= 5; }
-        if (Input.Keys["KeyA"]) { player.Position.x -= 5; }
-        if (Input.Keys["KeyS"]) { player.Position.y += 5; }
-        if (Input.Keys["KeyD"]) { player.Position.x += 5; }
+        // Move the player
+        const direction = Vector.clone({x: 0, y: 0});
+        if (Input.Keys["KeyW"]) { direction.y -= player.speed; }
+        if (Input.Keys["KeyS"]) { direction.y += player.speed; }
+        if (Input.Keys["KeyA"]) { direction.x -= player.speed; }
+        if (Input.Keys["KeyD"]) { direction.x += player.speed; }
+        let normalized  = Vector.normalize(direction);
+        let scaled      = Vector.scale(normalized, player.speed);
+        player.Position = Vector.add(player.Position, scaled);
         // Clamp player to Arena
         player.Position.x = Math.max(player.Position.x, 0);
         player.Position.x = Math.min(player.Position.x, Arena.Settings.Dimensions.x);
@@ -208,28 +240,6 @@ const Player = {
         }
         // Render player
         Display.draw_rectangle(player.Position, player.Dimensions, 'red');
-    }
-}
-const Debug = {
-    gun: function () {
-        const gun = Gun.get(Game.Gun);
-        if (!gun) { return false; }
-        if (Input.Keys["KeyQ"]) { gun.accuracy += 1; }
-        if (Input.Keys["KeyE"]) { gun.accuracy -= 1; }
-        if (Input.Keys["KeyR"]) { gun.projectiles   += 1; }
-        if (Input.Keys["KeyT"]) { gun.projectiles   -= 1; }
-        if (Input.Keys["KeyY"]) { gun.fire_rate.y   += 1; }
-        if (Input.Keys["KeyU"]) { gun.fire_rate.y   -= 1; }
-    },
-    update: function () {
-        const player = Player.get(Game.Player);
-        if (!player) { return false; }
-        const mouse_in_world = Vector.add(Input.Mouse, Display.Camera);
-        Display.draw_rectangle(player.Position, { x: 32, y: 32 }, 'red')
-        // Draw the mouse position
-        Display.draw_circle(mouse_in_world, 4, 'blue');
-        // Draw line connecting them
-        Display.draw_line(player.Position, mouse_in_world, 'white');
     }
 }
 interface Monster {
@@ -304,6 +314,7 @@ const Monster = {
                 Gun.remove(monster.Gun);
                 Monster.list.splice(m, 1);
                 m--;
+                Orb.create(monster.Position);
                 continue;
             }
             // Head towards player
@@ -488,6 +499,54 @@ const Gun = {
         return true;
     }
 }
+interface Orb {
+    Position: Vector,
+    Dimensions: Vector,
+    uuid: number,
+}
+const Orb = {
+    uuid: 0,
+    list: [] as Orb[],
+    create: function (position: Vector, dimensions: Vector = { x: 8, y: 8 }) {
+        const orb = {
+            Position:   position,
+            Dimensions: dimensions,
+            uuid:       Orb.uuid++,
+        }
+        Orb.list.push(orb);
+        return orb.uuid;
+    },
+    get: function (uuid: number) {
+        return Orb.list.find(orb => orb.uuid === uuid);
+    },
+    update: function () {
+        const player = Player.get(Game.Player);
+        if (!player) { return false; }
+        for (let o = 0; o < Orb.list.length; o++) {
+            const orb = Orb.list[o];
+            // Move towards player if player is within range
+            const direction = Vector.subtract(player.Position, orb.Position);
+            const distance = Vector.magnitude(direction);
+            if (distance < player.magnetism) {
+                // Move towards player faster the closer the player is
+                orb.Position.x += direction.x / distance * player.speed * 1.25;
+                orb.Position.y += direction.y / distance * player.speed * 1.25;
+            }
+            // Check for collisions with player
+            if (Math.abs(orb.Position.x - player.Position.x) < player.Dimensions.x / 2) {
+                if (Math.abs(orb.Position.y - player.Position.y) < player.Dimensions.y / 2) {
+                    // Make the orb disappear and increase the player's experience
+                    Orb.list.splice(o, 1);
+                    o--;
+                    Game.Experience++;
+                    continue;
+                }
+            }
+            // Render orb
+            Display.draw_circle(orb.Position, orb.Dimensions.x, 'yellow');
+        }
+    }
+}
 const Arena = {
     Settings: {
         Dimensions: {x: 1000, y: 1000}
@@ -508,6 +567,8 @@ const Game = {
     Player: -1,
 
     Gun: -1,
+
+    Experience: 0,
 
     initialize: function () {
         Game.Canvas  = document.getElementById(CONFIG.DISPLAY_NAME) as HTMLCanvasElement;
@@ -539,6 +600,8 @@ const Game = {
         Monster.update();
         // Move the projectiles
         Projectile.update();
+        // Move the orbs
+        Orb.update();
         // Draw player
         if (CONFIG.DEBUG_RENDERER) { Debug.update(); }
 
