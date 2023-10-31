@@ -30,6 +30,13 @@ var Vector = {
   },
   scale: function(a, scalar) {
     return { x: a.x * scalar, y: a.y * scalar };
+  },
+  rotate: function(a, angle) {
+    angle = angle * Math.PI / 180;
+    return {
+      x: a.x * Math.cos(angle) - a.y * Math.sin(angle),
+      y: a.x * Math.sin(angle) + a.y * Math.cos(angle)
+    };
   }
 };
 var Display = {
@@ -163,8 +170,7 @@ var Player = {
     Display.update();
     const mouse_to_camera = Vector.add(Input.Mouse, Display.Camera);
     if (Input.Mouse_Down) {
-      const direction = Vector.normalize(Vector.subtract(mouse_to_camera, player.Position));
-      Projectile.create(Vector.add(player.Position, Vector.scale(direction, 32)), Vector.scale(direction, 10), 1, 5, 60, true);
+      Gun.fire(Game.Gun, Vector.add({ x: 0, y: 0 }, player.Position), Vector.normalize(Vector.subtract(mouse_to_camera, player.Position)));
     }
     Display.draw_rectangle(player.Position, player.Dimensions, "red");
   }
@@ -182,12 +188,13 @@ var Debug = {
   }
 };
 var Monster = {
+  uuid: 0,
   list: [],
   create: function(position, dimensions = { x: 32, y: 32 }, health = { x: 10, y: 10 }) {
     const monster = {
       Position: position,
       Dimensions: dimensions,
-      uuid: Player.uuid++,
+      uuid: Monster.uuid++,
       Health: health
     };
     Monster.list.push(monster);
@@ -312,6 +319,63 @@ var Projectile = {
     }
   }
 };
+var Gun = {
+  list: [],
+  create: function(accuracy_degrees = 0, damage = 1, bullet_speed = 5, projectiles = 1, fire_rate = 1, magazine = 1, reload_time = 1, good = true) {
+    const gun = {
+      accuracy: accuracy_degrees,
+      damage,
+      bullet_speed,
+      bullet_range: 1000,
+      bullet_size: 4,
+      projectiles,
+      fire_rate: { x: 0, y: fire_rate },
+      magazine: { x: magazine, y: magazine },
+      reload_time: { x: reload_time, y: reload_time },
+      good,
+      uuid: Gun.list.length
+    };
+    Gun.list.push(gun);
+    return gun.uuid;
+  },
+  update: function() {
+    for (let g = 0;g < Gun.list.length; g++) {
+      const gun = Gun.list[g];
+      if (gun.reload_time.x < gun.reload_time.y) {
+        gun.reload_time.x++;
+        if (gun.reload_time.x >= gun.reload_time.y) {
+          gun.magazine.x = gun.magazine.y;
+        }
+      }
+      if (gun.fire_rate.x < gun.fire_rate.y) {
+        gun.fire_rate.x++;
+      }
+      if (gun.magazine.x < 1 && gun.reload_time.x >= gun.reload_time.y) {
+        gun.reload_time.x = 0;
+      }
+    }
+  },
+  get: function(uuid) {
+    return Gun.list.find((gun) => gun.uuid === uuid);
+  },
+  fire: function(gun, position, direction) {
+    const gun_data = Gun.get(gun);
+    if (!gun_data) {
+      return false;
+    }
+    if (gun_data.magazine.x < 1) {
+      return false;
+    }
+    if (gun_data.fire_rate.x < gun_data.fire_rate.y) {
+      return false;
+    }
+    gun_data.magazine.x--;
+    gun_data.fire_rate.x = 0;
+    for (let p = 0;p < gun_data.projectiles; p++) {
+      Projectile.create(position, Vector.rotate(Vector.scale(direction, gun_data.bullet_speed), (Math.random() - 0.5) * gun_data.accuracy), gun_data.damage, gun_data.bullet_size, gun_data.bullet_range / gun_data.bullet_speed, gun_data.good);
+    }
+  }
+};
 var Arena = {
   Settings: {
     Dimensions: { x: 200, y: 200 }
@@ -327,6 +391,7 @@ var Game = {
   time_frames: 0,
   time_ms: 0,
   Player: -1,
+  Gun: -1,
   initialize: function() {
     Game.Canvas = document.getElementById(CONFIG.DISPLAY_NAME);
     Game.Context = Game.Canvas.getContext("2d");
@@ -336,6 +401,7 @@ var Game = {
     Game.Context.fillRect(0, 0, CONFIG.DISPLAY_WIDTH, CONFIG.DISPLAY_HEIGHT);
     Input.initialize();
     Game.Player = Player.create({ x: CONFIG.DISPLAY_WIDTH / 2, y: CONFIG.DISPLAY_HEIGHT / 2 });
+    Game.Gun = Gun.create();
     Game.Loop = setInterval(Game.update, 1000 / CONFIG.FPS);
   },
   update: function() {
@@ -345,6 +411,7 @@ var Game = {
     }
     Display.clear();
     Arena.update();
+    Gun.update();
     Player.update();
     Monster.update();
     Projectile.update();
