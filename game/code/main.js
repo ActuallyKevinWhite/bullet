@@ -18,8 +18,10 @@ var CONFIG = {
   COLOR_PROJECTILE_GOOD: Palette.white,
   COLOR_PROJECTILE_BAD: Palette.white,
   DEBUG_INPUT: false,
-  DEBUG_PERFORMANCE: true,
+  DEBUG_PERFORMANCE: false,
   DEBUG_RENDERER: false,
+  CHARACTER_SPRITE_SIZE: 32,
+  GUN_SPRITE_SIZE: 32,
   DEBUG_GUN: true,
   PERFORMANCE_ENTITY_LIMTER: false,
   PROJECTILE_LIMIT_GOOD: 5000,
@@ -28,6 +30,52 @@ var CONFIG = {
   CAMERA_EASE: 0.95,
   MONSTER_LIMIT: 1000,
   FPS: 60
+};
+var ANIMATION;
+(function(ANIMATION2) {
+  ANIMATION2[ANIMATION2["IDLE"] = 0] = "IDLE";
+  ANIMATION2[ANIMATION2["MOVE"] = 1] = "MOVE";
+  ANIMATION2[ANIMATION2["FIRE"] = 2] = "FIRE";
+  ANIMATION2[ANIMATION2["RELOAD"] = 3] = "RELOAD";
+})(ANIMATION || (ANIMATION = {}));
+var DIRECTION;
+(function(DIRECTION2) {
+  DIRECTION2[DIRECTION2["UP"] = 0] = "UP";
+  DIRECTION2[DIRECTION2["RIGHT"] = 1] = "RIGHT";
+  DIRECTION2[DIRECTION2["DOWN"] = 2] = "DOWN";
+  DIRECTION2[DIRECTION2["LEFT"] = 3] = "LEFT";
+})(DIRECTION || (DIRECTION = {}));
+var Sprite_Character = {
+  uuid: 0,
+  list: {},
+  create: function(name) {
+    const spritesheet = new Image;
+    spritesheet.src = "visual/sprite/character/" + name + ".png";
+    if (!spritesheet) {
+      return false;
+    }
+    const sprite = {
+      heading: DIRECTION.DOWN,
+      animation: { state: ANIMATION.IDLE, frame: { x: 0, y: 4 }, timer: { x: 0, y: 15 } },
+      uuid: Sprite_Character.uuid++,
+      spritesheet
+    };
+    Sprite_Character.list[name] = sprite;
+    return true;
+  },
+  update: function() {
+    for (const name in Sprite_Character.list) {
+      const sprite = Sprite_Character.list[name];
+      sprite.animation.timer.x++;
+      if (sprite.animation.timer.x >= sprite.animation.timer.y) {
+        sprite.animation.timer.x = 0;
+        sprite.animation.frame.x++;
+        if (sprite.animation.frame.x >= sprite.animation.frame.y) {
+          sprite.animation.frame.x = 0;
+        }
+      }
+    }
+  }
 };
 var Debug = {
   gun: function() {
@@ -55,14 +103,14 @@ var Debug = {
     }
   },
   update: function() {
-    const player = Player.get(Game.Player);
-    if (!player) {
+    const character = Character.get(Game.Character);
+    if (!character) {
       return false;
     }
     const mouse_in_world = Vector.add(Input.Mouse, Display.Camera);
-    Display.draw_rectangle(player.Position, { x: 32, y: 32 }, "RED");
+    Display.draw_rectangle(character.Position, { x: 32, y: 32 }, "RED");
     Display.draw_circle(mouse_in_world, 4, "blue");
-    Display.draw_line(player.Position, mouse_in_world, "white");
+    Display.draw_line(character.Position, mouse_in_world, "white");
   }
 };
 var Vector = {
@@ -171,18 +219,60 @@ var Display = {
     Game.Context.fillText(text, position.x - Display.Camera.x, position.y + size / 2 - Display.Camera.y);
   },
   update: function() {
-    const player = Player.get(Game.Player);
-    if (!player) {
+    const character = Character.get(Game.Character);
+    if (!character) {
       return false;
     }
     const mouse_in_world = Vector.add(Input.Mouse, Display.Camera);
-    const target = Vector.add(player.Position, Vector.scale(Vector.subtract(mouse_in_world, player.Position), CONFIG.CAMERA_FOV));
+    const target = Vector.add(character.Position, Vector.scale(Vector.subtract(mouse_in_world, character.Position), CONFIG.CAMERA_FOV));
     let distance = Vector.subtract(target, Display.Camera);
     distance = Vector.subtract(distance, { x: CONFIG.DISPLAY_WIDTH / 2, y: CONFIG.DISPLAY_HEIGHT / 2 });
     distance = Vector.scale(distance, CONFIG.CAMERA_EASE);
     distance = Vector.subtract(target, distance);
     Display.Camera.x = distance.x - CONFIG.DISPLAY_WIDTH / 2;
     Display.Camera.y = distance.y - CONFIG.DISPLAY_HEIGHT / 2;
+    return true;
+  },
+  draw_character: function(name, position) {
+    const sprite = Sprite_Character.list[name];
+    if (!sprite) {
+      return false;
+    }
+    if (!Game.Context) {
+      return false;
+    }
+    let source_offset_x = 0;
+    let source_offset_y = 0;
+    switch (sprite.heading) {
+      case DIRECTION.UP:
+        source_offset_x += CONFIG.CHARACTER_SPRITE_SIZE * 1;
+        source_offset_y += 0;
+        break;
+      case DIRECTION.DOWN:
+        source_offset_x += CONFIG.CHARACTER_SPRITE_SIZE * 1;
+        source_offset_y += CONFIG.CHARACTER_SPRITE_SIZE * 2;
+        break;
+      case DIRECTION.LEFT:
+        source_offset_x += 0;
+        source_offset_y += CONFIG.CHARACTER_SPRITE_SIZE * 1;
+        break;
+      case DIRECTION.RIGHT:
+        source_offset_x += CONFIG.CHARACTER_SPRITE_SIZE * 2;
+        source_offset_y += CONFIG.CHARACTER_SPRITE_SIZE * 1;
+        break;
+    }
+    switch (sprite.animation.state) {
+      case ANIMATION.IDLE:
+        source_offset_x += 0;
+        break;
+      case ANIMATION.MOVE:
+        source_offset_x += CONFIG.CHARACTER_SPRITE_SIZE * 3 * sprite.animation.frame.x;
+        break;
+      default:
+        source_offset_x += 0;
+        break;
+    }
+    Game.Context.drawImage(sprite.spritesheet, source_offset_x, source_offset_y, CONFIG.CHARACTER_SPRITE_SIZE, CONFIG.CHARACTER_SPRITE_SIZE, position.x - CONFIG.CHARACTER_SPRITE_SIZE / 2 - Display.Camera.x, position.y - CONFIG.CHARACTER_SPRITE_SIZE / 2 - Display.Camera.y, CONFIG.CHARACTER_SPRITE_SIZE, CONFIG.CHARACTER_SPRITE_SIZE);
     return true;
   }
 };
@@ -221,8 +311,8 @@ var Input = {
     if (CONFIG.DEBUG_INPUT) {
       console.log(Input.Keys);
     }
-    const player = Player.get(Game.Player);
-    if (!player) {
+    const character = Character.get(Game.Character);
+    if (!character) {
       return false;
     }
     const gun = Gun.get(Game.Gun);
@@ -233,55 +323,84 @@ var Input = {
     Display.draw_ring(mouse_in_world, 12, 2, "white");
   }
 };
-var Player = {
+var Character = {
   uuid: 0,
   list: [],
-  create: function(position, dimensions = { x: 32, y: 32 }, health = { x: 3, y: 3 }) {
-    const player = {
-      Position: position,
-      Dimensions: dimensions,
-      uuid: Player.uuid++,
-      Health: health,
+  create: function(name) {
+    const character = {
+      name,
+      Position: { x: Arena.Settings.Dimensions.x / 2, y: Arena.Settings.Dimensions.y / 2 },
+      Dimensions: { x: 32, y: 32 },
+      uuid: Character.uuid++,
+      Health: { x: 3, y: 3 },
       speed: 5,
       magnetism: 128
     };
-    Player.list.push(player);
-    return player.uuid;
+    Character.list.push(character);
+    Sprite_Character.create(name);
+    return character.uuid;
   },
   get: function(uuid) {
-    return Player.list.find((player) => player.uuid === uuid);
+    return Character.list.find((character) => character.uuid === uuid);
   },
   update: function() {
-    const player = Player.get(Game.Player);
-    if (!player) {
+    const character = Character.get(Game.Character);
+    if (!character) {
+      return false;
+    }
+    const sprite = Sprite_Character.list[character.name];
+    if (!sprite) {
       return false;
     }
     const direction = Vector.clone({ x: 0, y: 0 });
     if (Input.Keys["KeyW"]) {
-      direction.y -= player.speed;
+      direction.y -= character.speed;
     }
     if (Input.Keys["KeyS"]) {
-      direction.y += player.speed;
+      direction.y += character.speed;
     }
     if (Input.Keys["KeyA"]) {
-      direction.x -= player.speed;
+      direction.x -= character.speed;
     }
     if (Input.Keys["KeyD"]) {
-      direction.x += player.speed;
+      direction.x += character.speed;
     }
     let normalized = Vector.normalize(direction);
-    let scaled = Vector.scale(normalized, player.speed);
-    player.Position = Vector.add(player.Position, scaled);
-    player.Position.x = Math.max(player.Position.x, 0);
-    player.Position.x = Math.min(player.Position.x, Arena.Settings.Dimensions.x);
-    player.Position.y = Math.max(player.Position.y, 0);
-    player.Position.y = Math.min(player.Position.y, Arena.Settings.Dimensions.y);
+    let scaled = Vector.scale(normalized, character.speed);
+    character.Position = Vector.add(character.Position, scaled);
+    if (scaled.x === 0 && scaled.y === 0) {
+      sprite.animation.state = ANIMATION.IDLE;
+      sprite.animation.frame.x = 0;
+      sprite.animation.frame.y = 0;
+    } else if (sprite.animation.state === ANIMATION.IDLE) {
+      sprite.animation.state = ANIMATION.MOVE;
+      sprite.animation.frame.x = 0;
+      sprite.animation.frame.y = 4;
+      sprite.animation.timer.x = 0;
+      sprite.animation.timer.y = 8;
+    }
+    if (scaled.y > 0) {
+      sprite.heading = DIRECTION.DOWN;
+    } else if (scaled.y < 0) {
+      sprite.heading = DIRECTION.UP;
+    }
+    if (Math.abs(scaled.x) > Math.abs(scaled.y)) {
+      if (scaled.x > 0) {
+        sprite.heading = DIRECTION.RIGHT;
+      } else if (scaled.x < 0) {
+        sprite.heading = DIRECTION.LEFT;
+      }
+    }
+    character.Position.x = Math.max(character.Position.x, 0);
+    character.Position.x = Math.min(character.Position.x, Arena.Settings.Dimensions.x);
+    character.Position.y = Math.max(character.Position.y, 0);
+    character.Position.y = Math.min(character.Position.y, Arena.Settings.Dimensions.y);
     Display.update();
     const mouse_to_camera = Vector.add(Input.Mouse, Display.Camera);
     if (Input.Mouse_Down) {
-      Gun.fire(Game.Gun, Vector.add({ x: 0, y: 0 }, player.Position), Vector.normalize(Vector.subtract(mouse_to_camera, player.Position)));
+      Gun.fire(Game.Gun, Vector.add({ x: 0, y: 0 }, character.Position), Vector.normalize(Vector.subtract(mouse_to_camera, character.Position)));
     }
-    Display.draw_rectangle(player.Position, player.Dimensions, CONFIG.COLOR_PLAYER);
+    Display.draw_character(character.name, character.Position);
   }
 };
 var Monster = {
@@ -305,8 +424,8 @@ var Monster = {
     return Monster.list.find((monster) => monster.uuid === uuid);
   },
   update: function() {
-    const player = Player.get(Game.Player);
-    if (!player) {
+    const character = Character.get(Game.Character);
+    if (!character) {
       return false;
     }
     if (Game.time_frames % CONFIG.FPS / Monster.Settings.spawn_rate_per_second === 0) {
@@ -316,26 +435,26 @@ var Monster = {
         switch (side) {
           case 0:
             position = {
-              x: player.Position.x - CONFIG.DISPLAY_WIDTH / 2 + Math.random() * CONFIG.DISPLAY_WIDTH,
-              y: player.Position.y - CONFIG.DISPLAY_HEIGHT / 2 - Math.random() * 128
+              x: character.Position.x - CONFIG.DISPLAY_WIDTH / 2 + Math.random() * CONFIG.DISPLAY_WIDTH,
+              y: character.Position.y - CONFIG.DISPLAY_HEIGHT / 2 - Math.random() * 128
             };
             break;
           case 1:
             position = {
-              x: player.Position.x + CONFIG.DISPLAY_WIDTH / 2 + Math.random() * 128,
-              y: player.Position.y - CONFIG.DISPLAY_HEIGHT / 2 + Math.random() * CONFIG.DISPLAY_HEIGHT
+              x: character.Position.x + CONFIG.DISPLAY_WIDTH / 2 + Math.random() * 128,
+              y: character.Position.y - CONFIG.DISPLAY_HEIGHT / 2 + Math.random() * CONFIG.DISPLAY_HEIGHT
             };
             break;
           case 2:
             position = {
-              x: player.Position.x - CONFIG.DISPLAY_WIDTH / 2 + Math.random() * CONFIG.DISPLAY_WIDTH,
-              y: player.Position.y + CONFIG.DISPLAY_HEIGHT / 2 + Math.random() * 128
+              x: character.Position.x - CONFIG.DISPLAY_WIDTH / 2 + Math.random() * CONFIG.DISPLAY_WIDTH,
+              y: character.Position.y + CONFIG.DISPLAY_HEIGHT / 2 + Math.random() * 128
             };
             break;
           case 3:
             position = {
-              x: player.Position.x - CONFIG.DISPLAY_WIDTH / 2 - Math.random() * 128,
-              y: player.Position.y - CONFIG.DISPLAY_HEIGHT / 2 + Math.random() * CONFIG.DISPLAY_HEIGHT
+              x: character.Position.x - CONFIG.DISPLAY_WIDTH / 2 - Math.random() * 128,
+              y: character.Position.y - CONFIG.DISPLAY_HEIGHT / 2 + Math.random() * CONFIG.DISPLAY_HEIGHT
             };
             break;
         }
@@ -351,7 +470,7 @@ var Monster = {
         Orb.create(monster.Position);
         continue;
       }
-      const direction = Vector.normalize(Vector.subtract(player.Position, monster.Position));
+      const direction = Vector.normalize(Vector.subtract(character.Position, monster.Position));
       monster.Position.x += direction.x;
       monster.Position.y += direction.y;
       Gun.fire(monster.Gun, Vector.clone(monster.Position), direction);
@@ -419,11 +538,11 @@ var Projectile = {
         e--;
         continue;
       }
-      for (let p = 0;p < Player.list.length; p++) {
-        const player = Player.list[p];
-        if (Math.abs(projectile.Position.x - player.Position.x) < player.Dimensions.x / 2) {
-          if (Math.abs(projectile.Position.y - player.Position.y) < player.Dimensions.y / 2) {
-            player.Health.x -= 1;
+      for (let p = 0;p < Character.list.length; p++) {
+        const character = Character.list[p];
+        if (Math.abs(projectile.Position.x - character.Position.x) < character.Dimensions.x / 2) {
+          if (Math.abs(projectile.Position.y - character.Position.y) < character.Dimensions.y / 2) {
+            character.Health.x -= 1;
             Projectile.evil_list.splice(e, 1);
             e--;
             break;
@@ -515,20 +634,20 @@ var Orb = {
     return Orb.list.find((orb) => orb.uuid === uuid);
   },
   update: function() {
-    const player = Player.get(Game.Player);
-    if (!player) {
+    const character = Character.get(Game.Character);
+    if (!character) {
       return false;
     }
     for (let o = 0;o < Orb.list.length; o++) {
       const orb = Orb.list[o];
-      const direction = Vector.subtract(player.Position, orb.Position);
+      const direction = Vector.subtract(character.Position, orb.Position);
       const distance = Vector.magnitude(direction);
-      if (distance < player.magnetism) {
-        orb.Position.x += direction.x / distance * player.speed * 1.25;
-        orb.Position.y += direction.y / distance * player.speed * 1.25;
+      if (distance < character.magnetism) {
+        orb.Position.x += direction.x / distance * character.speed * 1.25;
+        orb.Position.y += direction.y / distance * character.speed * 1.25;
       }
-      if (Math.abs(orb.Position.x - player.Position.x) < player.Dimensions.x / 2) {
-        if (Math.abs(orb.Position.y - player.Position.y) < player.Dimensions.y / 2) {
+      if (Math.abs(orb.Position.x - character.Position.x) < character.Dimensions.x / 2) {
+        if (Math.abs(orb.Position.y - character.Position.y) < character.Dimensions.y / 2) {
           Orb.list.splice(o, 1);
           o--;
           Game.Experience++;
@@ -553,7 +672,7 @@ var Game = {
   Loop: null,
   time_frames: 0,
   time_ms: 0,
-  Player: -1,
+  Character: -1,
   Gun: -1,
   Experience: 0,
   initialize: function() {
@@ -565,13 +684,13 @@ var Game = {
     Game.Context.fillRect(0, 0, CONFIG.DISPLAY_WIDTH, CONFIG.DISPLAY_HEIGHT);
     Input.initialize();
     Display.intialize();
-    Game.Player = Player.create({ x: CONFIG.DISPLAY_WIDTH / 2, y: CONFIG.DISPLAY_HEIGHT / 2 });
+    Game.Character = Character.create("kira");
     Game.Gun = Gun.create();
     Game.Loop = setInterval(Game.update, 1000 / CONFIG.FPS);
   },
   update: function() {
-    const player = Player.get(0);
-    if (!player) {
+    const character = Character.get(0);
+    if (!character) {
       return false;
     }
     if (CONFIG.DEBUG_GUN) {
@@ -580,7 +699,8 @@ var Game = {
     Display.clear();
     Arena.update();
     Gun.update();
-    Player.update();
+    Sprite_Character.update();
+    Character.update();
     Monster.update();
     Projectile.update();
     Orb.update();
@@ -591,9 +711,9 @@ var Game = {
     if (CONFIG.DEBUG_PERFORMANCE) {
       const new_time_ms = performance.now();
       const delta_time_ms = new_time_ms - Game.time_ms;
-      Display.draw_text(player.Position, `FPS: ${Math.round(1000 / delta_time_ms)}`);
+      Display.draw_text(character.Position, `FPS: ${Math.round(1000 / delta_time_ms)}`);
       Game.time_ms = new_time_ms;
-      Display.draw_text({ x: player.Position.x, y: player.Position.y + 16 }, `Entities: ${Player.list.length + Monster.list.length + Projectile.good_list.length + Projectile.evil_list.length}`);
+      Display.draw_text({ x: character.Position.x, y: character.Position.y + 16 }, `Entities: ${Character.list.length + Monster.list.length + Projectile.good_list.length + Projectile.evil_list.length}`);
     }
     Game.time_frames++;
   }

@@ -22,8 +22,11 @@ const CONFIG = {
     COLOR_PROJECTILE_BAD: Palette.white,
 
     DEBUG_INPUT: false,
-    DEBUG_PERFORMANCE: true,
+    DEBUG_PERFORMANCE: false,
     DEBUG_RENDERER: false,
+
+    CHARACTER_SPRITE_SIZE: 32, // Pixel size
+    GUN_SPRITE_SIZE:       32, // Pixel size
 
     DEBUG_GUN: true,
 
@@ -39,6 +42,61 @@ const CONFIG = {
 
     FPS: 60,
 }
+enum ANIMATION {
+    IDLE,
+    MOVE,
+    FIRE,
+    RELOAD
+}
+enum DIRECTION {
+    UP,
+    RIGHT,
+    DOWN,
+    LEFT
+}
+interface Animation {
+    state: ANIMATION,
+    frame: Vector,
+    timer: Vector,
+}
+interface Sprite_Character {
+    heading: DIRECTION,
+    animation: Animation,
+    uuid: number,
+    spritesheet: HTMLImageElement,
+}
+const Sprite_Character = {
+    uuid: 0,
+    list: {} as {[key: string]: Sprite_Character},
+    create: function (name: string) {
+        const spritesheet = new Image();
+        spritesheet.src   = "visual/sprite/character/" + name + ".png";
+        if (!spritesheet) { return false; }
+        const sprite: Sprite_Character = {
+            heading: DIRECTION.DOWN,
+            animation: {state: ANIMATION.IDLE, frame: {x: 0, y: 4}, timer: {x: 0, y: 15}},
+            uuid: Sprite_Character.uuid++,
+            spritesheet: spritesheet,
+        }
+        Sprite_Character.list[name] = sprite;
+        return true;        
+    },
+    update: function () {
+        for (const name in Sprite_Character.list) {
+            const sprite = Sprite_Character.list[name];
+            // Update the animation
+            sprite.animation.timer.x++;
+            if (sprite.animation.timer.x >= sprite.animation.timer.y) {
+                sprite.animation.timer.x = 0;
+                sprite.animation.frame.x++;
+                if (sprite.animation.frame.x >= sprite.animation.frame.y) {
+                    sprite.animation.frame.x = 0;
+                }
+            }
+        }
+    }
+}
+
 const Debug = {
     gun: function () {
         const gun = Gun.get(Game.Gun);
@@ -51,14 +109,14 @@ const Debug = {
         if (Input.Keys["KeyU"]) { gun.fire_rate.y   -= 1; }
     },
     update: function () {
-        const player = Player.get(Game.Player);
-        if (!player) { return false; }
+        const character = Character.get(Game.Character);
+        if (!character) { return false; }
         const mouse_in_world = Vector.add(Input.Mouse, Display.Camera);
-        Display.draw_rectangle(player.Position, { x: 32, y: 32 }, 'RED');
+        Display.draw_rectangle(character.Position, { x: 32, y: 32 }, 'RED');
         // Draw the mouse position
         Display.draw_circle(mouse_in_world, 4, 'blue');
         // Draw line connecting them
-        Display.draw_line(player.Position, mouse_in_world, 'white');
+        Display.draw_line(character.Position, mouse_in_world, 'white');
     }
 }
 interface Vector {
@@ -183,11 +241,11 @@ const Display = {
         );
     },
     update: function () {
-        const player = Player.get(Game.Player);
-        if (!player) { return false; }
-        // Find the midpoint between the mouse and the player, clamped to half the screen
+        const character = Character.get(Game.Character);
+        if (!character) { return false; }
+        // Find the midpoint between the mouse and the character, clamped to half the screen
         const mouse_in_world = Vector.add(Input.Mouse, Display.Camera);
-        const target = Vector.add(player.Position, Vector.scale(Vector.subtract(mouse_in_world, player.Position), CONFIG.CAMERA_FOV));
+        const target = Vector.add(character.Position, Vector.scale(Vector.subtract(mouse_in_world, character.Position), CONFIG.CAMERA_FOV));
         // ease the camera towards the target
         let distance = Vector.subtract(target, Display.Camera)
         distance     = Vector.subtract(distance, {x: CONFIG.DISPLAY_WIDTH / 2, y: CONFIG.DISPLAY_HEIGHT / 2});
@@ -196,6 +254,54 @@ const Display = {
 
         Display.Camera.x = distance.x - CONFIG.DISPLAY_WIDTH / 2;
         Display.Camera.y = distance.y - CONFIG.DISPLAY_HEIGHT / 2;
+        return true;
+    },
+    draw_character: function (name: string, position: Vector) {
+        const sprite = Sprite_Character.list[name];
+        if (!sprite) { return false; }
+        if (!Game.Context) { return false; }
+        let source_offset_x = 0;
+        let source_offset_y = 0;
+        // Parse heading
+        switch (sprite.heading) {
+            case DIRECTION.UP:
+                source_offset_x += CONFIG.CHARACTER_SPRITE_SIZE * 1;
+                source_offset_y += 0;
+                break;
+            case DIRECTION.DOWN:
+                source_offset_x += CONFIG.CHARACTER_SPRITE_SIZE * 1;
+                source_offset_y += CONFIG.CHARACTER_SPRITE_SIZE * 2;
+                break;
+            case DIRECTION.LEFT:
+                source_offset_x += 0;
+                source_offset_y += CONFIG.CHARACTER_SPRITE_SIZE * 1;
+                break;
+            case DIRECTION.RIGHT:
+                source_offset_x += CONFIG.CHARACTER_SPRITE_SIZE * 2;
+                source_offset_y += CONFIG.CHARACTER_SPRITE_SIZE * 1;
+                break;
+        }
+        // Now parse animation
+        switch (sprite.animation.state) {
+            case ANIMATION.IDLE:
+                source_offset_x += 0;
+                break;
+            case ANIMATION.MOVE:
+                source_offset_x += CONFIG.CHARACTER_SPRITE_SIZE * 3 * sprite.animation.frame.x;
+                break;
+            default:
+                source_offset_x += 0;
+                break;
+        }
+        // Now that we have the top left corner of the sprite, draw it
+        Game.Context.drawImage(
+            sprite.spritesheet,
+            source_offset_x, source_offset_y,
+            CONFIG.CHARACTER_SPRITE_SIZE, CONFIG.CHARACTER_SPRITE_SIZE,
+            position.x - CONFIG.CHARACTER_SPRITE_SIZE / 2 - Display.Camera.x,
+            position.y - CONFIG.CHARACTER_SPRITE_SIZE / 2 - Display.Camera.y,
+            CONFIG.CHARACTER_SPRITE_SIZE, CONFIG.CHARACTER_SPRITE_SIZE
+        );
         return true;
     }
 }
@@ -239,65 +345,100 @@ const Input = {
     },
     update: function () {
         if (CONFIG.DEBUG_INPUT) { console.log(Input.Keys); }
-        const player = Player.get(Game.Player);
-        if (!player) { return false; }
+        const character = Character.get(Game.Character);
+        if (!character) { return false; }
         const gun = Gun.get(Game.Gun);
         if (!gun) { return false; }
         const mouse_in_world = Vector.add(Input.Mouse, Display.Camera);
         Display.draw_ring(mouse_in_world, 12, 2, 'white');
     }
 }
-interface Player {
+interface Character {
+    name:       string,
     Position:   Vector,
     Dimensions: Vector,
     Health:     Vector, // x: current, y: max
     magnetism:  number,
     speed:      number,
-    uuid: number
+    uuid:       number
 }
-const Player = {
+const Character = {
     uuid: 0,
-    list: [] as Player[],
-    create: function (position: Vector, dimensions: Vector = { x: 32, y: 32 }, health: Vector = { x: 3, y: 3 }) {
-        const player = {
-            Position:   position,
-            Dimensions: dimensions,
-            uuid:       Player.uuid++,
-            Health:     health,
+    list: [] as Character[],
+    create: function (name: string) {
+        const character = {
+            name:       name,
+            Position:   { x: Arena.Settings.Dimensions.x / 2, y: Arena.Settings.Dimensions.y / 2 },
+            Dimensions: { x: 32, y: 32 },
+            uuid:       Character.uuid++,
+            Health:     { x: 3, y: 3 },
             speed:      5,
             magnetism:  128,
         }
-        Player.list.push(player);
-        return player.uuid;
+        Character.list.push(character);
+        Sprite_Character.create(name);
+        return character.uuid;
     },
     get: function (uuid: number) {
-        return Player.list.find(player => player.uuid === uuid);
+        return Character.list.find(character => character.uuid === uuid);
     },
     update: function () {
-        const player = Player.get(Game.Player);
-        if (!player) { return false; }
-        // Move the player
+        const character = Character.get(Game.Character);
+        if (!character) { return false; }
+        const sprite    = Sprite_Character.list[character.name];
+        if (!sprite) { return false; }
+        // Move the character
         const direction = Vector.clone({x: 0, y: 0});
-        if (Input.Keys["KeyW"]) { direction.y -= player.speed; }
-        if (Input.Keys["KeyS"]) { direction.y += player.speed; }
-        if (Input.Keys["KeyA"]) { direction.x -= player.speed; }
-        if (Input.Keys["KeyD"]) { direction.x += player.speed; }
+        if (Input.Keys["KeyW"]) { direction.y -= character.speed; }
+        if (Input.Keys["KeyS"]) { direction.y += character.speed; }
+        if (Input.Keys["KeyA"]) { direction.x -= character.speed; }
+        if (Input.Keys["KeyD"]) { direction.x += character.speed; }
         let normalized  = Vector.normalize(direction);
-        let scaled      = Vector.scale(normalized, player.speed);
-        player.Position = Vector.add(player.Position, scaled);
-        // Clamp player to Arena
-        player.Position.x = Math.max(player.Position.x, 0);
-        player.Position.x = Math.min(player.Position.x, Arena.Settings.Dimensions.x);
-        player.Position.y = Math.max(player.Position.y, 0);
-        player.Position.y = Math.min(player.Position.y, Arena.Settings.Dimensions.y);
-        // Shoot a bullet in the direction of the mouse from the player
+        let scaled      = Vector.scale(normalized, character.speed);
+        character.Position = Vector.add(character.Position, scaled);
+        // Get the animation type
+        if (scaled.x === 0 && scaled.y === 0) {
+            sprite.animation.state = ANIMATION.IDLE;
+            sprite.animation.frame.x = 0;
+            sprite.animation.frame.y = 0;
+        } 
+        else if (sprite.animation.state === ANIMATION.IDLE) {
+            sprite.animation.state = ANIMATION.MOVE;
+            sprite.animation.frame.x = 0;
+            sprite.animation.frame.y = 4;
+            sprite.animation.timer.x = 0;
+            sprite.animation.timer.y = 8;
+        }
+        // Set the animation heading
+        if (scaled.y > 0) {
+            sprite.heading = DIRECTION.DOWN;
+        }
+        else if (scaled.y < 0) {
+            sprite.heading = DIRECTION.UP;
+        }
+        // Only overwrite if the x component is larger
+        if (Math.abs(scaled.x) > Math.abs(scaled.y)) {
+            if (scaled.x > 0) {
+                sprite.heading = DIRECTION.RIGHT;
+            } 
+            else if (scaled.x < 0) {
+                sprite.heading = DIRECTION.LEFT;
+            }
+        }
+        // Clamp character to Arena
+        character.Position.x = Math.max(character.Position.x, 0);
+        character.Position.x = Math.min(character.Position.x, Arena.Settings.Dimensions.x);
+        character.Position.y = Math.max(character.Position.y, 0);
+        character.Position.y = Math.min(character.Position.y, Arena.Settings.Dimensions.y);
+        // Shoot a bullet in the direction of the mouse from the character
         Display.update();
         const mouse_to_camera = Vector.add(Input.Mouse, Display.Camera);
         if (Input.Mouse_Down) {
-            Gun.fire(Game.Gun, Vector.add({x: 0, y: 0}, player.Position), Vector.normalize(Vector.subtract(mouse_to_camera, player.Position)));
+            Gun.fire(Game.Gun, Vector.add({x: 0, y: 0}, character.Position), Vector.normalize(Vector.subtract(mouse_to_camera, character.Position)));
         }
-        // Render player
-        Display.draw_rectangle(player.Position, player.Dimensions, CONFIG.COLOR_PLAYER);
+        // Render character
+        Display.draw_character(character.name, character.Position);
+        // Display.draw_rectangle(character.Position, character.Dimensions, CONFIG.COLOR_PLAYER);
     }
 }
 interface Monster {
@@ -328,37 +469,37 @@ const Monster = {
         return Monster.list.find(monster => monster.uuid === uuid);
     },
     update: function () {
-        const player = Player.get(Game.Player);
-        if (!player) { return false; }
+        const character = Character.get(Game.Character);
+        if (!character) { return false; }
 
         if (Game.time_frames % CONFIG.FPS / Monster.Settings.spawn_rate_per_second === 0) {
             if (Monster.list.length < CONFIG.MONSTER_LIMIT) {
                 // Spawn monsters off screen
                 const side = Math.floor(Math.random() * 4);
                 let position = {x: 0, y: 0}
-                switch (side) {
+                switch (side) { 
                     case 0: // Top
                         position = { 
-                            x: player.Position.x - CONFIG.DISPLAY_WIDTH / 2 + Math.random() * CONFIG.DISPLAY_WIDTH,
-                            y: player.Position.y - CONFIG.DISPLAY_HEIGHT / 2 - Math.random() * 128
+                            x: character.Position.x - CONFIG.DISPLAY_WIDTH / 2 + Math.random() * CONFIG.DISPLAY_WIDTH,
+                            y: character.Position.y - CONFIG.DISPLAY_HEIGHT / 2 - Math.random() * 128
                         };
                         break;
                     case 1: // Right
                         position = { 
-                            x: player.Position.x + CONFIG.DISPLAY_WIDTH / 2 + Math.random() * 128,
-                            y: player.Position.y - CONFIG.DISPLAY_HEIGHT / 2 + Math.random() * CONFIG.DISPLAY_HEIGHT
+                            x: character.Position.x + CONFIG.DISPLAY_WIDTH / 2 + Math.random() * 128,
+                            y: character.Position.y - CONFIG.DISPLAY_HEIGHT / 2 + Math.random() * CONFIG.DISPLAY_HEIGHT
                         };
                         break;
                     case 2: // Bottom
                         position = { 
-                            x: player.Position.x - CONFIG.DISPLAY_WIDTH / 2 + Math.random() * CONFIG.DISPLAY_WIDTH,
-                            y: player.Position.y + CONFIG.DISPLAY_HEIGHT / 2 + Math.random() * 128
+                            x: character.Position.x - CONFIG.DISPLAY_WIDTH / 2 + Math.random() * CONFIG.DISPLAY_WIDTH,
+                            y: character.Position.y + CONFIG.DISPLAY_HEIGHT / 2 + Math.random() * 128
                         };
                         break;
                     case 3: // Left
                         position = { 
-                            x: player.Position.x - CONFIG.DISPLAY_WIDTH / 2 - Math.random() * 128,
-                            y: player.Position.y - CONFIG.DISPLAY_HEIGHT / 2 + Math.random() * CONFIG.DISPLAY_HEIGHT
+                            x: character.Position.x - CONFIG.DISPLAY_WIDTH / 2 - Math.random() * 128,
+                            y: character.Position.y - CONFIG.DISPLAY_HEIGHT / 2 + Math.random() * CONFIG.DISPLAY_HEIGHT
                         };
                         break;
                 }
@@ -375,11 +516,11 @@ const Monster = {
                 Orb.create(monster.Position);
                 continue;
             }
-            // Head towards player
-            const direction = Vector.normalize(Vector.subtract(player.Position, monster.Position));
+            // Head towards character
+            const direction = Vector.normalize(Vector.subtract(character.Position, monster.Position));
             monster.Position.x += direction.x;
             monster.Position.y += direction.y;
-            // Shoot at player
+            // Shoot at character
             Gun.fire(monster.Gun, Vector.clone(monster.Position), direction);
             // Render monster
             Display.draw_rectangle(monster.Position, monster.Dimensions, CONFIG.COLOR_MONSTER);
@@ -456,12 +597,12 @@ const Projectile = {
                 e--;
                 continue;
             }
-            // Check for collisions with Player
-            for (let p = 0; p < Player.list.length; p++) {
-                const player = Player.list[p];
-                if (Math.abs(projectile.Position.x - player.Position.x) < player.Dimensions.x / 2) {
-                    if (Math.abs(projectile.Position.y - player.Position.y) < player.Dimensions.y / 2) {
-                        player.Health.x -= 1; // TODO: Damage the player
+            // Check for collisions with Character
+            for (let p = 0; p < Character.list.length; p++) {
+                const character = Character.list[p];
+                if (Math.abs(projectile.Position.x - character.Position.x) < character.Dimensions.x / 2) {
+                    if (Math.abs(projectile.Position.y - character.Position.y) < character.Dimensions.y / 2) {
+                        character.Health.x -= 1; // TODO: Damage the character
                         Projectile.evil_list.splice(e, 1);
                         e--;
                         break;
@@ -578,22 +719,22 @@ const Orb = {
         return Orb.list.find(orb => orb.uuid === uuid);
     },
     update: function () {
-        const player = Player.get(Game.Player);
-        if (!player) { return false; }
+        const character = Character.get(Game.Character);
+        if (!character) { return false; }
         for (let o = 0; o < Orb.list.length; o++) {
             const orb = Orb.list[o];
-            // Move towards player if player is within range
-            const direction = Vector.subtract(player.Position, orb.Position);
+            // Move towards character if character is within range
+            const direction = Vector.subtract(character.Position, orb.Position);
             const distance = Vector.magnitude(direction);
-            if (distance < player.magnetism) {
-                // Move towards player faster the closer the player is
-                orb.Position.x += direction.x / distance * player.speed * 1.25;
-                orb.Position.y += direction.y / distance * player.speed * 1.25;
+            if (distance < character.magnetism) {
+                // Move towards character faster the closer the character is
+                orb.Position.x += direction.x / distance * character.speed * 1.25;
+                orb.Position.y += direction.y / distance * character.speed * 1.25;
             }
-            // Check for collisions with player
-            if (Math.abs(orb.Position.x - player.Position.x) < player.Dimensions.x / 2) {
-                if (Math.abs(orb.Position.y - player.Position.y) < player.Dimensions.y / 2) {
-                    // Make the orb disappear and increase the player's experience
+            // Check for collisions with character
+            if (Math.abs(orb.Position.x - character.Position.x) < character.Dimensions.x / 2) {
+                if (Math.abs(orb.Position.y - character.Position.y) < character.Dimensions.y / 2) {
+                    // Make the orb disappear and increase the character's experience
                     Orb.list.splice(o, 1);
                     o--;
                     Game.Experience++;
@@ -622,7 +763,7 @@ const Game = {
     time_frames: 0,
     time_ms:     0,
 
-    Player: -1,
+    Character: -1,
 
     Gun: -1,
 
@@ -641,20 +782,21 @@ const Game = {
         Input.initialize();
         Display.intialize();
 
-        Game.Player = Player.create({ x: CONFIG.DISPLAY_WIDTH / 2, y: CONFIG.DISPLAY_HEIGHT / 2 });
+        Game.Character = Character.create( 'kira' );
         Game.Gun  = Gun.create()
         Game.Loop = setInterval(Game.update, 1000 / CONFIG.FPS);
     },
     update: function () {
-        const player = Player.get(0);
-        if (!player) { return false; }
+        const character = Character.get(0);
+        if (!character) { return false; }
         // Increase gun spread
         if (CONFIG.DEBUG_GUN) {Debug.gun();}
         Display.clear();
         Arena.update();
         // Input
         Gun.update();
-        Player.update();
+        Sprite_Character.update();
+        Character.update();
         // Move the mosnters
         Monster.update();
         // Move the projectiles
@@ -669,9 +811,9 @@ const Game = {
         if (CONFIG.DEBUG_PERFORMANCE) {
             const new_time_ms = performance.now();
             const delta_time_ms = new_time_ms - Game.time_ms;
-            Display.draw_text(player.Position, `FPS: ${Math.round(1000 / delta_time_ms)}`);
+            Display.draw_text(character.Position, `FPS: ${Math.round(1000 / delta_time_ms)}`);
             Game.time_ms = new_time_ms;
-            Display.draw_text({x: player.Position.x, y: player.Position.y + 16}, `Entities: ${Player.list.length + Monster.list.length + Projectile.good_list.length + Projectile.evil_list.length}`);
+            Display.draw_text({x: character.Position.x, y: character.Position.y + 16}, `Entities: ${Character.list.length + Monster.list.length + Projectile.good_list.length + Projectile.evil_list.length}`);
         }
         Game.time_frames++;
     }
