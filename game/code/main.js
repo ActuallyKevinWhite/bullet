@@ -274,6 +274,46 @@ var Display = {
     }
     Game.Context.drawImage(sprite.spritesheet, source_offset_x, source_offset_y, CONFIG.CHARACTER_SPRITE_SIZE, CONFIG.CHARACTER_SPRITE_SIZE, position.x - CONFIG.CHARACTER_SPRITE_SIZE / 2 - Display.Camera.x, position.y - CONFIG.CHARACTER_SPRITE_SIZE / 2 - Display.Camera.y, CONFIG.CHARACTER_SPRITE_SIZE, CONFIG.CHARACTER_SPRITE_SIZE);
     return true;
+  },
+  draw_gun: function(uuid, position, direction) {
+    const gun = Gun.get(uuid);
+    if (!gun) {
+      return false;
+    }
+    const sprite = Sprite_Gun.list[gun.sprite + "_" + uuid.toString()];
+    if (!sprite) {
+      return false;
+    }
+    if (!Game.Context) {
+      return false;
+    }
+    let source_offset_x = 0;
+    switch (sprite.animation.state) {
+      case ANIMATION.IDLE:
+        source_offset_x += 0;
+        break;
+      case ANIMATION.FIRE:
+        source_offset_x += CONFIG.GUN_SPRITE_SIZE * 1;
+        break;
+      case ANIMATION.MOVE:
+        source_offset_x += CONFIG.GUN_SPRITE_SIZE * 2;
+        break;
+      case ANIMATION.RELOAD:
+        source_offset_x += CONFIG.GUN_SPRITE_SIZE * 3;
+        break;
+      default:
+        source_offset_x += 0;
+        break;
+    }
+    Game.Context.save();
+    Game.Context.translate(position.x - Display.Camera.x, position.y - Display.Camera.y);
+    const angle = Math.atan2(direction.y, direction.x);
+    Game.Context.rotate(angle);
+    if (direction.x < 0) {
+      Game.Context.scale(1, -1);
+    }
+    Game.Context.drawImage(sprite.spritesheet, source_offset_x, 0, CONFIG.GUN_SPRITE_SIZE, CONFIG.GUN_SPRITE_SIZE, 0, -CONFIG.GUN_SPRITE_SIZE / 2, CONFIG.GUN_SPRITE_SIZE, CONFIG.GUN_SPRITE_SIZE);
+    Game.Context.restore();
   }
 };
 var Input = {
@@ -540,8 +580,8 @@ var Projectile = {
       }
       for (let p = 0;p < Character.list.length; p++) {
         const character = Character.list[p];
-        if (Math.abs(projectile.Position.x - character.Position.x) < character.Dimensions.x / 2) {
-          if (Math.abs(projectile.Position.y - character.Position.y) < character.Dimensions.y / 2) {
+        if (Math.abs(projectile.Position.x - character.Position.x) < character.Dimensions.x / 6) {
+          if (Math.abs(projectile.Position.y - character.Position.y) < character.Dimensions.y / 6) {
             character.Health.x -= 1;
             Projectile.evil_list.splice(e, 1);
             e--;
@@ -553,9 +593,30 @@ var Projectile = {
     }
   }
 };
+var Sprite_Gun = {
+  list: {},
+  create: function(name, uuid) {
+    const spritesheet = new Image;
+    spritesheet.src = "visual/sprite/gun/" + name + ".png";
+    if (!spritesheet) {
+      return false;
+    }
+    const sprite = {
+      uuid,
+      spritesheet,
+      animation: {
+        state: ANIMATION.IDLE,
+        frame: { x: 0, y: 1 },
+        timer: { x: 0, y: 1 }
+      }
+    };
+    Sprite_Gun.list[name + "_" + uuid.toString()] = sprite;
+    return true;
+  }
+};
 var Gun = {
   list: [],
-  create: function(accuracy_degrees = 0, damage = 1, bullet_speed = 5, projectiles = 1, fire_rate = 1, magazine = 1, reload_time = 1, good = true) {
+  create: function(accuracy_degrees = 20, damage = 1, bullet_speed = 5, projectiles = 1, fire_rate = 10, magazine = 15, reload_time = 60, good = true, sprite = "") {
     const gun = {
       accuracy: accuracy_degrees,
       damage,
@@ -563,29 +624,53 @@ var Gun = {
       bullet_range: 1000,
       bullet_size: 4,
       projectiles,
+      trigger_pulled: false,
       fire_rate: { x: 0, y: fire_rate },
       magazine: { x: magazine, y: magazine },
       reload_time: { x: reload_time, y: reload_time },
       good,
-      uuid: Gun.list.length
+      uuid: Gun.list.length,
+      sprite
     };
     Gun.list.push(gun);
+    if (sprite !== "") {
+      Sprite_Gun.create(sprite, gun.uuid);
+    }
     return gun.uuid;
   },
   update: function() {
     for (let g = 0;g < Gun.list.length; g++) {
       const gun = Gun.list[g];
+      let animation = ANIMATION.IDLE;
       if (gun.reload_time.x < gun.reload_time.y) {
         gun.reload_time.x++;
+        animation = ANIMATION.RELOAD;
         if (gun.reload_time.x >= gun.reload_time.y) {
           gun.magazine.x = gun.magazine.y;
+          animation = ANIMATION.IDLE;
         }
       }
       if (gun.fire_rate.x < gun.fire_rate.y) {
         gun.fire_rate.x++;
+        if (gun.fire_rate.x === 1) {
+          animation = ANIMATION.FIRE;
+        }
       }
       if (gun.magazine.x < 1 && gun.reload_time.x >= gun.reload_time.y) {
         gun.reload_time.x = 0;
+      }
+      if (gun.sprite !== "") {
+        const sprite = Sprite_Gun.list[gun.sprite + "_" + gun.uuid.toString()];
+        if (!sprite) {
+          continue;
+        }
+        sprite.animation.state = animation;
+        const character = Character.get(Game.Character);
+        if (!character) {
+          return false;
+        }
+        const mouse_in_world = Vector.add(Input.Mouse, Display.Camera);
+        Display.draw_gun(gun.uuid, character.Position, Vector.normalize(Vector.subtract(mouse_in_world, character.Position)));
       }
     }
   },
@@ -605,8 +690,18 @@ var Gun = {
     }
     gun_data.magazine.x--;
     gun_data.fire_rate.x = 0;
+    const spread = gun_data.trigger_pulled ? gun_data.accuracy : 0;
+    gun_data.trigger_pulled = true;
+    const sprite = Sprite_Gun.list[gun_data.sprite + "_" + gun_data.uuid.toString()];
+    if (sprite) {
+      sprite.animation.state = ANIMATION.FIRE;
+      sprite.animation.frame.x = 0;
+      sprite.animation.frame.y = 0;
+      sprite.animation.timer.x = 0;
+      sprite.animation.timer.y = 8;
+    }
     for (let p = 0;p < gun_data.projectiles; p++) {
-      Projectile.create(Vector.clone(position), Vector.rotate(Vector.scale(direction, gun_data.bullet_speed), (Math.random() - 0.5) * gun_data.accuracy), gun_data.damage, gun_data.bullet_size, gun_data.bullet_range / gun_data.bullet_speed, gun_data.good);
+      Projectile.create(Vector.clone(position), Vector.rotate(Vector.scale(direction, gun_data.bullet_speed), (Math.random() - 0.5) * spread), gun_data.damage, gun_data.bullet_size, gun_data.bullet_range / gun_data.bullet_speed, gun_data.good);
     }
   },
   remove: function(uuid) {
@@ -685,7 +780,7 @@ var Game = {
     Input.initialize();
     Display.intialize();
     Game.Character = Character.create("kira");
-    Game.Gun = Gun.create();
+    Game.Gun = Gun.create(undefined, undefined, undefined, undefined, undefined, undefined, undefined, true, "pistol");
     Game.Loop = setInterval(Game.update, 1000 / CONFIG.FPS);
   },
   update: function() {
