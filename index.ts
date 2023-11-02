@@ -34,6 +34,9 @@ const CONFIG = {
 
     PROJECTILE_LIMIT_GOOD:  5000,
     PROJECTILE_LIMIT_EVIL: 15000,
+
+    GUN_FIRE_POOL:          20,
+    GUN_RELOAD_POOL:         5,
     
     CAMERA_FOV: 0.5,
     CAMERA_EASE: 0.95,
@@ -684,15 +687,34 @@ const Sprite_Gun = {
         return true;        
     }
 }
+interface Audio_Pool {
+    index: number,
+    list: HTMLAudioElement[],
+}
 interface Gun_SFX {
-    Fire:   HTMLAudioElement,
-    Reload: HTMLAudioElement,
+    Fire:   Audio_Pool,
+    Reload: Audio_Pool,
 }
 const Gun_SFX = {
     list: {} as {[key: string]: Gun_SFX},
     create: function (name: string) {
-        const fire   = new Audio("audio/sfx/" + name + "/fire.wav");
-        const reload = new Audio("audio/sfx/" + name + "/reload.wav");
+        // The sounds aren't stacking so we'll rotate them in a pool
+        const fire = {
+            index: 0,
+            list: [] as HTMLAudioElement[],
+        }
+        for (let f = 0; f < CONFIG.GUN_FIRE_POOL; f++) {
+            const audio = new Audio("audio/sfx/" + name + "/fire.wav");
+            fire.list.push(audio);
+        }
+        const reload = {
+            index: 0,
+            list: [] as HTMLAudioElement[],
+        }
+        for (let r = 0; r < CONFIG.GUN_RELOAD_POOL; r++) {
+            const audio = new Audio("audio/sfx/" + name + "/reload.wav");
+            reload.list.push(audio);
+        }
         const sfx: Gun_SFX = {
             Fire:   fire,
             Reload: reload,
@@ -702,12 +724,20 @@ const Gun_SFX = {
     fire: function (name: string) {
         const sfx = Gun_SFX.list[name];
         if (!sfx) { return false; }
-        sfx.Fire.play();
+        sfx.Fire.list[sfx.Fire.index].play();
+        sfx.Fire.index++;
+        if (sfx.Fire.index >= sfx.Fire.list.length) {
+            sfx.Fire.index = 0;
+        }
     },
     reload: function (name: string) {
         const sfx = Gun_SFX.list[name];
         if (!sfx) { return false; }
-        sfx.Reload.play();
+        sfx.Reload.list[sfx.Reload.index].play();
+        sfx.Reload.index++;
+        if (sfx.Reload.index >= sfx.Reload.list.length) {
+            sfx.Reload.index = 0;
+        }
     }
 }
 interface Gun {

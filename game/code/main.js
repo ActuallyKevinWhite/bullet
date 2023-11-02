@@ -26,6 +26,8 @@ var CONFIG = {
   PERFORMANCE_ENTITY_LIMTER: false,
   PROJECTILE_LIMIT_GOOD: 5000,
   PROJECTILE_LIMIT_EVIL: 15000,
+  GUN_FIRE_POOL: 20,
+  GUN_RELOAD_POOL: 5,
   CAMERA_FOV: 0.5,
   CAMERA_EASE: 0.95,
   MONSTER_LIMIT: 1000,
@@ -617,8 +619,22 @@ var Sprite_Gun = {
 var Gun_SFX = {
   list: {},
   create: function(name) {
-    const fire = new Audio("audio/sfx/" + name + "/fire.wav");
-    const reload = new Audio("audio/sfx/" + name + "/reload.wav");
+    const fire = {
+      index: 0,
+      list: []
+    };
+    for (let f = 0;f < CONFIG.GUN_FIRE_POOL; f++) {
+      const audio = new Audio("audio/sfx/" + name + "/fire.wav");
+      fire.list.push(audio);
+    }
+    const reload = {
+      index: 0,
+      list: []
+    };
+    for (let r = 0;r < CONFIG.GUN_RELOAD_POOL; r++) {
+      const audio = new Audio("audio/sfx/" + name + "/reload.wav");
+      reload.list.push(audio);
+    }
     const sfx = {
       Fire: fire,
       Reload: reload
@@ -630,14 +646,22 @@ var Gun_SFX = {
     if (!sfx) {
       return false;
     }
-    sfx.Fire.play();
+    sfx.Fire.list[sfx.Fire.index].play();
+    sfx.Fire.index++;
+    if (sfx.Fire.index >= sfx.Fire.list.length) {
+      sfx.Fire.index = 0;
+    }
   },
   reload: function(name) {
     const sfx = Gun_SFX.list[name];
     if (!sfx) {
       return false;
     }
-    sfx.Reload.play();
+    sfx.Reload.list[sfx.Reload.index].play();
+    sfx.Reload.index++;
+    if (sfx.Reload.index >= sfx.Reload.list.length) {
+      sfx.Reload.index = 0;
+    }
   }
 };
 var Gun = {
