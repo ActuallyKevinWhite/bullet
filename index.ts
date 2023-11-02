@@ -600,8 +600,8 @@ const Projectile = {
             // Check for collisions with Character
             for (let p = 0; p < Character.list.length; p++) {
                 const character = Character.list[p];
-                if (Math.abs(projectile.Position.x - character.Position.x) < character.Dimensions.x / 2) {
-                    if (Math.abs(projectile.Position.y - character.Position.y) < character.Dimensions.y / 2) {
+                if (Math.abs(projectile.Position.x - character.Position.x) < character.Dimensions.x / 8) {
+                    if (Math.abs(projectile.Position.y - character.Position.y) < character.Dimensions.y / 8) {
                         character.Health.x -= 1; // TODO: Damage the character
                         Projectile.evil_list.splice(e, 1);
                         e--;
