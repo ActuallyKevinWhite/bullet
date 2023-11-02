@@ -10,8 +10,8 @@ const Palette = {
 }
 const CONFIG = {
     DISPLAY_NAME: "display",
-    DISPLAY_WIDTH: 1280,
-    DISPLAY_HEIGHT: 720,
+    DISPLAY_WIDTH: 1280 / 2,
+    DISPLAY_HEIGHT: 720 / 2,
 
     COLOR_VOID: Palette.black,
     COLOR_ARENA: Palette.dark,

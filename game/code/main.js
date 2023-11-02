@@ -8,8 +8,8 @@ var Palette = {
 };
 var CONFIG = {
   DISPLAY_NAME: "display",
-  DISPLAY_WIDTH: 1280,
-  DISPLAY_HEIGHT: 720,
+  DISPLAY_WIDTH: 640,
+  DISPLAY_HEIGHT: 360,
   COLOR_VOID: Palette.black,
   COLOR_ARENA: Palette.dark,
   COLOR_PLAYER: Palette.white,
