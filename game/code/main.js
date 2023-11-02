@@ -280,7 +280,7 @@ var Display = {
     if (!gun) {
       return false;
     }
-    const sprite = Sprite_Gun.list[gun.sprite + "_" + uuid.toString()];
+    const sprite = Sprite_Gun.list[gun.name + "_" + uuid.toString()];
     if (!sprite) {
       return false;
     }
@@ -449,7 +449,7 @@ var Monster = {
   Settings: {
     spawn_rate_per_second: 1
   },
-  create: function(position, dimensions = { x: 32, y: 32 }, health = { x: 10, y: 10 }) {
+  create: function(position, dimensions = { x: 32, y: 32 }, health = { x: 3, y: 3 }) {
     const monster = {
       Position: position,
       Dimensions: dimensions,
@@ -614,9 +614,35 @@ var Sprite_Gun = {
     return true;
   }
 };
+var Gun_SFX = {
+  list: {},
+  create: function(name) {
+    const fire = new Audio("audio/sfx/" + name + "/fire.wav");
+    const reload = new Audio("audio/sfx/" + name + "/reload.wav");
+    const sfx = {
+      Fire: fire,
+      Reload: reload
+    };
+    Gun_SFX.list[name] = sfx;
+  },
+  fire: function(name) {
+    const sfx = Gun_SFX.list[name];
+    if (!sfx) {
+      return false;
+    }
+    sfx.Fire.play();
+  },
+  reload: function(name) {
+    const sfx = Gun_SFX.list[name];
+    if (!sfx) {
+      return false;
+    }
+    sfx.Reload.play();
+  }
+};
 var Gun = {
   list: [],
-  create: function(accuracy_degrees = 20, damage = 1, bullet_speed = 5, projectiles = 1, fire_rate = 10, magazine = 15, reload_time = 60, good = true, sprite = "") {
+  create: function(accuracy_degrees = 20, damage = 1, bullet_speed = 5, projectiles = 1, fire_rate = 10, magazine = 15, reload_time = 60, good = true, name = "") {
     const gun = {
       accuracy: accuracy_degrees,
       damage,
@@ -630,11 +656,12 @@ var Gun = {
       reload_time: { x: reload_time, y: reload_time },
       good,
       uuid: Gun.list.length,
-      sprite
+      name
     };
     Gun.list.push(gun);
-    if (sprite !== "") {
-      Sprite_Gun.create(sprite, gun.uuid);
+    if (name !== "") {
+      Sprite_Gun.create(name, gun.uuid);
+      Gun_SFX.create(name);
     }
     return gun.uuid;
   },
@@ -648,6 +675,7 @@ var Gun = {
         if (gun.reload_time.x >= gun.reload_time.y) {
           gun.magazine.x = gun.magazine.y;
           animation = ANIMATION.IDLE;
+          Gun_SFX.reload(gun.name);
         }
       }
       if (gun.fire_rate.x < gun.fire_rate.y) {
@@ -659,8 +687,8 @@ var Gun = {
       if (gun.magazine.x < 1 && gun.reload_time.x >= gun.reload_time.y) {
         gun.reload_time.x = 0;
       }
-      if (gun.sprite !== "") {
-        const sprite = Sprite_Gun.list[gun.sprite + "_" + gun.uuid.toString()];
+      if (gun.name !== "") {
+        const sprite = Sprite_Gun.list[gun.name + "_" + gun.uuid.toString()];
         if (!sprite) {
           continue;
         }
@@ -692,7 +720,7 @@ var Gun = {
     gun_data.fire_rate.x = 0;
     const spread = gun_data.trigger_pulled ? gun_data.accuracy : 0;
     gun_data.trigger_pulled = true;
-    const sprite = Sprite_Gun.list[gun_data.sprite + "_" + gun_data.uuid.toString()];
+    const sprite = Sprite_Gun.list[gun_data.name + "_" + gun_data.uuid.toString()];
     if (sprite) {
       sprite.animation.state = ANIMATION.FIRE;
       sprite.animation.frame.x = 0;
@@ -700,6 +728,7 @@ var Gun = {
       sprite.animation.timer.x = 0;
       sprite.animation.timer.y = 8;
     }
+    Gun_SFX.fire(gun_data.name);
     for (let p = 0;p < gun_data.projectiles; p++) {
       Projectile.create(Vector.clone(position), Vector.rotate(Vector.scale(direction, gun_data.bullet_speed), (Math.random() - 0.5) * spread), gun_data.damage, gun_data.bullet_size, gun_data.bullet_range / gun_data.bullet_speed, gun_data.good);
     }

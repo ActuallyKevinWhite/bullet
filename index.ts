@@ -307,7 +307,7 @@ const Display = {
     draw_gun: function (uuid: number, position: Vector, direction: Vector) {
         const gun    = Gun.get(uuid);
         if  (!gun)   { return false; }
-        const sprite = Sprite_Gun.list[gun.sprite+"_"+uuid.toString()];
+        const sprite = Sprite_Gun.list[gun.name+"_"+uuid.toString()];
         if (!sprite)       { return false; }
         if (!Game.Context) { return false; }
 
@@ -501,7 +501,7 @@ const Monster = {
     Settings: {
         spawn_rate_per_second: 1,
     },
-    create: function (position: Vector, dimensions: Vector = { x: 32, y: 32 }, health: Vector = { x: 10, y: 10 }) {
+    create: function (position: Vector, dimensions: Vector = { x: 32, y: 32 }, health: Vector = { x: 3, y: 3 }) {
         const monster = {
             Position:   position,
             Dimensions: dimensions,
@@ -684,6 +684,32 @@ const Sprite_Gun = {
         return true;        
     }
 }
+interface Gun_SFX {
+    Fire:   HTMLAudioElement,
+    Reload: HTMLAudioElement,
+}
+const Gun_SFX = {
+    list: {} as {[key: string]: Gun_SFX},
+    create: function (name: string) {
+        const fire   = new Audio("audio/sfx/" + name + "/fire.wav");
+        const reload = new Audio("audio/sfx/" + name + "/reload.wav");
+        const sfx: Gun_SFX = {
+            Fire:   fire,
+            Reload: reload,
+        }
+        Gun_SFX.list[name] = sfx;
+    },
+    fire: function (name: string) {
+        const sfx = Gun_SFX.list[name];
+        if (!sfx) { return false; }
+        sfx.Fire.play();
+    },
+    reload: function (name: string) {
+        const sfx = Gun_SFX.list[name];
+        if (!sfx) { return false; }
+        sfx.Reload.play();
+    }
+}
 interface Gun {
     accuracy:     number, // How accurate the gun is (degrees)
     damage:       number, // How much damage the gun does
@@ -697,11 +723,11 @@ interface Gun {
     reload_time:  Vector, // How many frames it takes to reload
     good:         boolean,
     uuid:         number,
-    sprite:       string,
+    name:       string,
 }
 const Gun = {
     list: [] as Gun[],
-    create: function (accuracy_degrees: number = 20, damage: number = 1, bullet_speed: number = 5, projectiles: number = 1, fire_rate: number = 10, magazine: number = 15, reload_time: number = 60, good: boolean = true, sprite: string = "") {
+    create: function (accuracy_degrees: number = 20, damage: number = 1, bullet_speed: number = 5, projectiles: number = 1, fire_rate: number = 10, magazine: number = 15, reload_time: number = 60, good: boolean = true, name: string = "") {
         const gun = {
             accuracy:     accuracy_degrees,
             damage:       damage,
@@ -715,11 +741,12 @@ const Gun = {
             reload_time:  {x: reload_time, y: reload_time},
             good:         good,
             uuid:         Gun.list.length,
-            sprite:       sprite
+            name:         name
         }
         Gun.list.push(gun);
-        if (sprite !== "") {
-            Sprite_Gun.create(sprite, gun.uuid);
+        if (name !== "") {
+            Sprite_Gun.create(name, gun.uuid);
+            Gun_SFX.create(name);
         }
         return gun.uuid;
     },
@@ -735,6 +762,7 @@ const Gun = {
                 if (gun.reload_time.x >= gun.reload_time.y) {
                     gun.magazine.x = gun.magazine.y;
                     animation = ANIMATION.IDLE;
+                    Gun_SFX.reload(gun.name);
                 }
             }
             // Fire
@@ -749,8 +777,8 @@ const Gun = {
                 gun.reload_time.x = 0;
             }
             // Finally draw the gun if there's a sprite
-            if (gun.sprite !== "") {
-                const sprite = Sprite_Gun.list[gun.sprite+"_"+gun.uuid.toString()];
+            if (gun.name !== "") {
+                const sprite = Sprite_Gun.list[gun.name+"_"+gun.uuid.toString()];
                 if (!sprite) { continue; }
                 sprite.animation.state = animation;
                 const character = Character.get(Game.Character);
@@ -776,7 +804,7 @@ const Gun = {
         // First shot's always on point
         const spread = gun_data.trigger_pulled ? gun_data.accuracy : 0;
         gun_data.trigger_pulled = true;
-        const sprite = Sprite_Gun.list[gun_data.sprite+"_"+gun_data.uuid.toString()];
+        const sprite = Sprite_Gun.list[gun_data.name+"_"+gun_data.uuid.toString()];
         if (sprite) {
             sprite.animation.state = ANIMATION.FIRE;
             sprite.animation.frame.x = 0;
@@ -784,7 +812,7 @@ const Gun = {
             sprite.animation.timer.x = 0;
             sprite.animation.timer.y = 8;
         }
-        // TODO: Add SFX
+        Gun_SFX.fire(gun_data.name);
         for (let p = 0; p < gun_data.projectiles; p++) {
             Projectile.create(
                 Vector.clone(position),
